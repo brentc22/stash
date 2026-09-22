@@ -159,4 +159,48 @@ T.test("verborgen set overleeft opnieuw laden") {
     T.expect(!second.isHidden("com.a"), "com.a is weer getoond")
 }
 
+T.test("inventory ziet draaiende apps") {
+    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suite) else {
+        T.expect(false, "kon geen testsuite maken"); return
+    }
+    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+    let inventory = AppInventory(defaults: defaults)
+    T.expect(inventory.runningBundleIDs.count > 10,
+             "er draaien er meer dan 10, kreeg \(inventory.runningBundleIDs.count)")
+    T.expect(inventory.runningBundleIDs.contains("com.apple.controlcenter"),
+             "Control Center draait altijd")
+}
+
+T.test("inventory onthoudt apps die gestopt zijn") {
+    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suite) else {
+        T.expect(false, "kon geen testsuite maken"); return
+    }
+    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+    defaults.set(["com.verdwenen.app": "Verdwenen App"], forKey: "knownAppNames")
+    let inventory = AppInventory(defaults: defaults)
+
+    let known = inventory.knownApps.first { $0.id == "com.verdwenen.app" }
+    T.expect(known != nil, "een eerder gezien app hoort in de lijst te blijven staan")
+    T.equal(known?.isRunning, false)
+    T.equal(known?.name, "Verdwenen App")
+}
+
+T.test("inventory meldt een wijziging") {
+    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suite) else {
+        T.expect(false, "kon geen testsuite maken"); return
+    }
+    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+    let inventory = AppInventory(defaults: defaults)
+    var called = 0
+    inventory.onChange = { called += 1 }
+    inventory.refresh()
+    T.equal(called, 1, "refresh hoort onChange aan te roepen:")
+}
+
 T.finish()
