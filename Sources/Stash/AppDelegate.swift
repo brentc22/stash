@@ -87,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let allowed = Allowlist.compute(
             running: inventory.runningBundleIDs,
             hidden: hidden.bundleIDs,
+            alwaysHidden: hidden.alwaysHiddenBundleIDs,
             state: state,
             ownBundleID: ownBundleID
         )

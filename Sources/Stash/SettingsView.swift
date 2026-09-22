@@ -14,7 +14,7 @@ import StashCore
 final class SettingsModel: ObservableObject {
 
     @Published var apps: [KnownApp] = []
-    @Published var hiddenIDs: Set<String> = []
+    @Published var visibilities: [String: AppVisibility] = [:]
     /// The search field's text. Purely a view concern — never persisted, never read by
     /// `refresh()` — so it's fine that it lives here instead of `Preferences`.
     @Published var query: String = ""
@@ -63,14 +63,18 @@ final class SettingsModel: ObservableObject {
     /// window is shown, so an app launched while the window was closed still shows up.
     func refresh() {
         apps = inventory.knownApps.filter { $0.id != ownBundleID }
-        hiddenIDs = hidden.bundleIDs
+        visibilities = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, hidden.visibility(for: $0.id)) })
         collapseDelay = preferences.collapseDelay
         launchAtLogin = preferences.launchAtLogin
     }
 
-    func setHidden(_ isHidden: Bool, for bundleID: String) {
-        hidden.setHidden(isHidden, for: bundleID)
-        hiddenIDs = hidden.bundleIDs
+    func visibility(for bundleID: String) -> AppVisibility {
+        visibilities[bundleID] ?? hidden.visibility(for: bundleID)
+    }
+
+    func setVisibility(_ visibility: AppVisibility, for bundleID: String) {
+        hidden.setVisibility(visibility, for: bundleID)
+        visibilities[bundleID] = visibility
         onChange()
     }
 
@@ -103,8 +107,10 @@ struct SettingsView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Verbergen").font(.headline)
-            Text("Vink aan wat achter het pijltje verdwijnt. Een app met meerdere iconen "
-                 + "gaat als geheel weg — dat is een beperking van macOS, niet van Stash.")
+            Text("Kies per app: Zichtbaar blijft altijd in de balk, Verbergen gaat weg "
+                 + "achter het pijltje maar komt terug bij uitklappen, en Altijd verbergen "
+                 + "komt in geen enkele stand meer terug. Een app met meerdere iconen gaat "
+                 + "als geheel weg — dat is een beperking van macOS, niet van Stash.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -128,23 +134,29 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(filteredApps) { app in
-                    Toggle(isOn: Binding(
-                        get: { model.hiddenIDs.contains(app.id) },
-                        set: { model.setHidden($0, for: app.id) }
-                    )) {
-                        HStack(spacing: 8) {
-                            if let icon = model.icon(for: app.id) {
-                                Image(nsImage: icon).resizable().frame(width: 16, height: 16)
-                            } else {
-                                Image(systemName: "app.dashed").frame(width: 16, height: 16)
-                            }
-                            Text(app.name)
-                            if !app.isRunning {
-                                Text("niet actief").font(.caption).foregroundStyle(.tertiary)
+                    HStack(spacing: 8) {
+                        if let icon = model.icon(for: app.id) {
+                            Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                        } else {
+                            Image(systemName: "app.dashed").frame(width: 16, height: 16)
+                        }
+                        Text(app.name)
+                        if !app.isRunning {
+                            Text("niet actief").font(.caption).foregroundStyle(.tertiary)
+                        }
+                        Spacer()
+                        Picker("", selection: Binding(
+                            get: { model.visibility(for: app.id) },
+                            set: { model.setVisibility($0, for: app.id) }
+                        )) {
+                            ForEach(AppVisibility.allCases, id: \.rawValue) { visibility in
+                                Text(visibility.label).tag(visibility)
                             }
                         }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .frame(width: 150)
                     }
-                    .toggleStyle(.checkbox)
                 }
                 .listStyle(.inset)
             }

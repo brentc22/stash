@@ -262,4 +262,67 @@ T.test("zoekveld filtert op naam of bundle id, hoofdletter-ongevoelig") {
     T.expect(!app.matches(searchQuery: "safari"), "mag niet matchen op iets anders")
 }
 
+T.test("altijd verborgen app zit niet in de allowlist bij ingeklapt") {
+    let result = Allowlist.compute(
+        running: ["com.a", "com.b"],
+        hidden: [],
+        alwaysHidden: ["com.b"],
+        state: .collapsed,
+        ownBundleID: ownID
+    )
+    T.expect(!result.contains("com.b"), "com.b is altijd verborgen, hoort er niet in te zitten")
+}
+
+T.test("altijd verborgen app zit niet in de allowlist bij uitgeklapt") {
+    // Dit is het verschil met `hidden` en de reden dat de feature bestaat: uitklappen
+    // brengt een gewone `hidden` app terug, maar een `alwaysHidden` app nooit.
+    let result = Allowlist.compute(
+        running: ["com.a", "com.b"],
+        hidden: [],
+        alwaysHidden: ["com.b"],
+        state: .expanded,
+        ownBundleID: ownID
+    )
+    T.expect(!result.contains("com.b"),
+             "com.b is altijd verborgen, hoort ook bij uitgeklapt niet terug te komen")
+}
+
+T.test("eigen bundle id zit er nog steeds in als hij altijd-verborgen is gemarkeerd") {
+    let result = Allowlist.compute(
+        running: ["com.a"],
+        hidden: [],
+        alwaysHidden: [ownID],
+        state: .collapsed,
+        ownBundleID: ownID
+    )
+    T.expect(result.contains(ownID),
+             "zonder pijltje kan de gebruiker niets meer uitklappen")
+}
+
+T.test("driestand overleeft opnieuw laden uit UserDefaults") {
+    withTestDefaults { defaults in
+        let first = HiddenSet(defaults: defaults)
+        first.setVisibility(.hidden, for: "com.a")
+        first.setVisibility(.alwaysHidden, for: "com.b")
+
+        let second = HiddenSet(defaults: defaults)
+        T.equal(second.visibility(for: "com.a"), .hidden)
+        T.equal(second.visibility(for: "com.b"), .alwaysHidden)
+        T.equal(second.visibility(for: "com.c"), .visible, "nooit gezette apps zijn zichtbaar:")
+    }
+}
+
+T.test("een app in beide sets telt als altijd-verborgen") {
+    withTestDefaults { defaults in
+        // Simuleert een hand-bewerkt of gemigreerd defaults-bestand waar een bundle id in
+        // beide sleutels tegelijk voorkomt — de normale UI-weg zet nooit beide.
+        defaults.set(["com.a"], forKey: "hiddenBundleIDs")
+        defaults.set(["com.a"], forKey: "alwaysHiddenBundleIDs")
+
+        let hiddenSet = HiddenSet(defaults: defaults)
+        T.equal(hiddenSet.visibility(for: "com.a"), .alwaysHidden,
+                "in beide sets moet de sterkste garantie winnen")
+    }
+}
+
 T.finish()
