@@ -4,6 +4,23 @@ public struct KnownApp: Identifiable, Hashable {
     public let id: String       // bundle identifier
     public let name: String
     public let isRunning: Bool
+
+    public init(id: String, name: String, isRunning: Bool) {
+        self.id = id
+        self.name = name
+        self.isRunning = isRunning
+    }
+}
+
+extension KnownApp {
+    /// The settings search field's predicate: name or bundle id, case-insensitive.
+    /// Lives here (not in `SettingsView`) so it stays a plain, testable function instead
+    /// of logic buried in a SwiftUI view body.
+    public func matches(searchQuery query: String) -> Bool {
+        guard !query.isEmpty else { return true }
+        return name.localizedCaseInsensitiveContains(query)
+            || id.localizedCaseInsensitiveContains(query)
+    }
 }
 
 /// Tracks which apps are running and which ones we have ever seen.

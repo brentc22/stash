@@ -15,6 +15,9 @@ final class SettingsModel: ObservableObject {
 
     @Published var apps: [KnownApp] = []
     @Published var hiddenIDs: Set<String> = []
+    /// The search field's text. Purely a view concern — never persisted, never read by
+    /// `refresh()` — so it's fine that it lives here instead of `Preferences`.
+    @Published var query: String = ""
     @Published var collapseDelay: CollapseDelay {
         didSet {
             preferences.collapseDelay = collapseDelay
@@ -78,9 +81,17 @@ struct SettingsView: View {
 
     @ObservedObject var model: SettingsModel
 
+    /// Filters the app list for display only — never touches the hidden set. An app
+    /// filtered out of view stays hidden or visible exactly as it was; the search field
+    /// only changes what's on screen.
+    private var filteredApps: [KnownApp] {
+        model.apps.filter { $0.matches(searchQuery: model.query) }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
+            searchField
             Divider()
             list
             Divider()
@@ -101,27 +112,43 @@ struct SettingsView: View {
         .padding(16)
     }
 
+    private var searchField: some View {
+        TextField("Zoeken", text: $model.query)
+            .textFieldStyle(.roundedBorder)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+    }
+
     private var list: some View {
-        List(model.apps) { app in
-            Toggle(isOn: Binding(
-                get: { model.hiddenIDs.contains(app.id) },
-                set: { model.setHidden($0, for: app.id) }
-            )) {
-                HStack(spacing: 8) {
-                    if let icon = model.icon(for: app.id) {
-                        Image(nsImage: icon).resizable().frame(width: 16, height: 16)
-                    } else {
-                        Image(systemName: "app.dashed").frame(width: 16, height: 16)
+        Group {
+            if filteredApps.isEmpty {
+                Text("Geen apps gevonden")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(filteredApps) { app in
+                    Toggle(isOn: Binding(
+                        get: { model.hiddenIDs.contains(app.id) },
+                        set: { model.setHidden($0, for: app.id) }
+                    )) {
+                        HStack(spacing: 8) {
+                            if let icon = model.icon(for: app.id) {
+                                Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                            } else {
+                                Image(systemName: "app.dashed").frame(width: 16, height: 16)
+                            }
+                            Text(app.name)
+                            if !app.isRunning {
+                                Text("niet actief").font(.caption).foregroundStyle(.tertiary)
+                            }
+                        }
                     }
-                    Text(app.name)
-                    if !app.isRunning {
-                        Text("niet actief").font(.caption).foregroundStyle(.tertiary)
-                    }
+                    .toggleStyle(.checkbox)
                 }
+                .listStyle(.inset)
             }
-            .toggleStyle(.checkbox)
         }
-        .listStyle(.inset)
     }
 
     private var footer: some View {

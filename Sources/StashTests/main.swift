@@ -253,4 +253,13 @@ T.test("alle vertragingen hebben een Nederlands label") {
     T.equal(CollapseDelay.after10.label, "Na 10 seconden")
 }
 
+T.test("zoekveld filtert op naam of bundle id, hoofdletter-ongevoelig") {
+    let app = KnownApp(id: "com.apple.finder", name: "Finder", isRunning: true)
+    T.expect(app.matches(searchQuery: ""), "lege query moet alles tonen")
+    T.expect(app.matches(searchQuery: "find"), "moet matchen op naam")
+    T.expect(app.matches(searchQuery: "FIND"), "moet hoofdletter-ongevoelig matchen op naam")
+    T.expect(app.matches(searchQuery: "com.apple"), "moet matchen op bundle id")
+    T.expect(!app.matches(searchQuery: "safari"), "mag niet matchen op iets anders")
+}
+
 T.finish()
