@@ -459,4 +459,72 @@ T.test("elke lijstfilter- en zichtbaarheidsstand heeft een label, symbool en too
     T.equal(AppVisibility.alwaysHidden.symbolName, "lock")
 }
 
+T.test("sneltoets reist als keyCode plus modifiers rond door UserDefaults") {
+    withTestDefaults { defaults in
+        let prefs = Preferences(defaults: defaults)
+        T.expect(prefs.hotKey == nil, "zonder migratie en zonder opgeslagen waarde: geen sneltoets")
+
+        let combo = HotKeyCombo(keyCode: 49,
+                                modifiers: NSEvent.ModifierFlags([.command, .shift]).rawValue)
+        prefs.hotKey = combo
+
+        let reloaded = Preferences(defaults: defaults).hotKey
+        T.equal(reloaded?.keyCode, 49)
+        T.equal(reloaded?.modifiers, combo.modifiers)
+        T.equal(reloaded?.displayString, "⌘⇧Spatie")
+
+        // Wissen is iets anders dan "nog nooit gezet": na een expliciete nil mag de
+        // migratie niet alsnog ⌃⌥S terugzetten.
+        prefs.hotKey = nil
+        T.expect(Preferences(defaults: defaults).hotKey == nil, "gewiste sneltoets blijft gewist")
+    }
+}
+
+T.test("migratie neemt ⌃⌥S over als de oude vaste sneltoets aanstond") {
+    withTestDefaults { defaults in
+        defaults.set(true, forKey: "useGlobalHotKey")
+        let migrated = Preferences(defaults: defaults).hotKey
+        T.equal(migrated, HotKeyCombo.legacyDefault, "oude vaste sneltoets:")
+        T.equal(migrated?.displayString, "⌥⌃S")
+    }
+}
+
+T.test("een combinatie zonder modifiers wordt geweigerd") {
+    let bare = HotKeyCombo(keyCode: 1, modifiers: 0)
+    T.expect(!bare.isValid, "kale S mag nooit een globale sneltoets worden")
+    T.expect(bare.rejectionReason != nil, "een geweigerde combinatie hoort een reden te geven")
+}
+
+T.test("alleen Shift als modifier wordt ook geweigerd") {
+    let shiftOnly = HotKeyCombo(keyCode: 1, modifiers: NSEvent.ModifierFlags.shift.rawValue)
+    T.expect(!shiftOnly.isValid, "⇧S is nog steeds gewoon een letter typen")
+    T.expect(HotKeyCombo(keyCode: 1, modifiers: NSEvent.ModifierFlags.control.rawValue).isValid,
+             "⌃S hoort wel te mogen")
+    T.expect(HotKeyCombo(keyCode: 1,
+                         modifiers: NSEvent.ModifierFlags([.shift, .command]).rawValue).isValid,
+             "⇧⌘S hoort wel te mogen")
+}
+
+T.test("de weergavestring zet de modifiers in de vaste volgorde ⌘⌥⌃⇧ plus de toets") {
+    let all = HotKeyCombo(keyCode: 1,
+                          modifiers: NSEvent.ModifierFlags([.shift, .control, .option, .command]).rawValue)
+    T.equal(all.displayString, "⌘⌥⌃⇧S", "vaste volgorde, ongeacht hoe hij getypt is:")
+
+    // Caps lock en fn horen er niet in te lekken.
+    let noisy = HotKeyCombo(keyCode: 1,
+                            modifiers: NSEvent.ModifierFlags([.command, .capsLock, .function]).rawValue)
+    T.equal(noisy.displayString, "⌘S")
+    T.equal(HotKeyCombo(keyCode: 126, modifiers: NSEvent.ModifierFlags.option.rawValue).displayString,
+            "⌥↑")
+}
+
+T.test("een onbekende keyCode geeft een terugvalnaam, geen lege string") {
+    let name = HotKeyCombo.keyName(for: 200)
+    T.expect(!name.isEmpty, "een onbekende toets mag nooit een lege naam opleveren")
+    T.equal(name, "Toets 200")
+
+    let combo = HotKeyCombo(keyCode: 200, modifiers: NSEvent.ModifierFlags.control.rawValue)
+    T.equal(combo.displayString, "⌃Toets 200")
+}
+
 T.finish()

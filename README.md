@@ -165,12 +165,19 @@ those measurements ambiguous.
 
 ## Settings
 
-Right-click the arrow for "Instellingen…" (Settings): a search field, a checklist of
-every app Stash has seen running (apps not running right now are marked *niet actief*)
-with a per-app Zichtbaar/Verbergen/Altijd verbergen picker, an auto-collapse delay, a
-"Starten bij inloggen" (start at login) toggle backed by `SMAppService`, an optional
-global hotkey (⌃⌥S), and an optional "Toon alleen apps met een menubalk-icoon" filter
-(see below).
+Right-click the arrow for "Instellingen…" (Settings). The window has two tabs.
+
+**Apps** lists every app Stash has seen running (apps not running right now are marked
+*niet actief*), each row carrying three buttons — Zichtbaar / Verbergen / Altijd
+verbergen — with only the active one tinted. Above the list: a search field, an
+Alles/Verborgen/Altijd segment and a "shown of total" counter; below it, a line counting
+the three states.
+
+**Algemeen** holds everything that is not per-app: a recordable global shortcut (click
+the field, press the combination; Escape cancels, and a combination without ⌘/⌥/⌃ is
+refused), an auto-collapse delay, a "Starten bij inloggen" (start at login) toggle backed
+by `SMAppService`, and the optional "Alleen apps met een menubalk-icoon" filter (see
+below).
 
 <p>
   <img src="docs/images/settings-window.png" alt="Stash's settings window, listing known apps with checkboxes plus auto-collapse and login-item controls" width="420">

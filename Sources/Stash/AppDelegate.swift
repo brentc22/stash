@@ -56,9 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         inventory.start()
         rebuild()
 
-        // Created before `SettingsModel` below: its `init` calls `refresh()`, which sets
-        // `useGlobalHotKey` and fires that property's `didSet` — which, through
-        // `onHotKeyPreferenceChanged`, reaches `syncHotKeyRegistration()`. That force-
+        // Created before `SettingsModel` below: the model may reach back into
+        // `syncHotKeyRegistration()` while it is still being built, and that force-
         // unwraps `hotKey`; building it after `SettingsModel` crashed on every launch.
         hotKey = GlobalHotKey { [weak self] in self?.toggle() }
 
@@ -67,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hidden: hidden,
             preferences: preferences,
             onChange: { [weak self] in self?.rebuild() },
-            onHotKeyPreferenceChanged: { [weak self] in self?.syncHotKeyRegistration() }
+            onHotKeyChanged: { [weak self] in self?.syncHotKeyRegistration() ?? false }
         )
         settingsWindow = SettingsWindowController(model: model)
 
@@ -115,24 +114,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.show()
     }
 
-    /// Registers or unregisters ⌃⌥S to match `preferences.useGlobalHotKey`. Called once
-    /// at launch and again every time the checkbox in settings changes.
+    /// Registers or unregisters the shortcut to match `preferences.hotKey`. Called once
+    /// at launch and again every time the recorder in settings stores a new combination.
     ///
-    /// If registration fails — another app already holds the combination — this is not a
-    /// crash and not a silent failure: log it and flip the preference back to off, so the
-    /// checkbox never keeps claiming a hotkey that isn't actually active (the same
-    /// mistake as F18 from the previous round: a checkbox asserting something untrue).
-    private func syncHotKeyRegistration() {
-        guard preferences.useGlobalHotKey else {
+    /// Returns whether the shortcut is now genuinely in the state the preference claims.
+    /// `false` means Carbon refused the combination — another app already holds it — and
+    /// the caller must not let the recorder field keep showing it. Not a crash, not a
+    /// silent failure: the `OSStatus` is logged (the same F18 mistake this house pattern
+    /// exists to avoid: a control asserting something untrue).
+    @discardableResult
+    private func syncHotKeyRegistration() -> Bool {
+        guard let combo = preferences.hotKey else {
             hotKey.unregister()
-            return
+            return true
         }
-        guard hotKey.register() else {
-            NSLog("Stash: kon globale sneltoets ⌃⌥S niet registreren — "
-                  + "waarschijnlijk al in gebruik door een andere app")
-            preferences.useGlobalHotKey = false
-            return
+        guard hotKey.register(combo) else {
+            NSLog("Stash: kon globale sneltoets \(combo.displayString) niet registreren "
+                  + "(OSStatus \(hotKey.lastRegisterStatus)) — waarschijnlijk al in "
+                  + "gebruik door een andere app")
+            return false
         }
+        NSLog("Stash: globale sneltoets \(combo.displayString) geregistreerd (OSStatus 0)")
+        return true
     }
 
     private func quit() {

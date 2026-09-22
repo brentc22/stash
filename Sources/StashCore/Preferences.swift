@@ -22,6 +22,13 @@ public final class Preferences {
     private static let collapseDelayKey = "collapseDelaySeconds"
     private static let useGlobalHotKeyKey = "useGlobalHotKey"
     private static let showOnlyMenuBarAppsKey = "showOnlyMenuBarApps"
+    private static let hotKeyKeyCodeKey = "hotKeyKeyCode"
+    private static let hotKeyModifiersKey = "hotKeyModifiers"
+
+    /// Written into `hotKeyKeyCodeKey` when the user clears the shortcut. A stored -1
+    /// means "deliberately none", which is not the same as "nothing stored yet" — only
+    /// the latter may fall back to the legacy migration value below.
+    private static let noHotKeyCode = -1
 
     private let defaults: UserDefaults
 
@@ -37,10 +44,10 @@ public final class Preferences {
         set { defaults.set(newValue.rawValue, forKey: Self.collapseDelayKey) }
     }
 
-    /// Whether ⌃⌥S should toggle the bar. Default `false`: an app that grabs a global
-    /// hotkey without being asked is rude. `bool(forKey:)` already returns `false` for an
-    /// absent key, so no extra "has this ever been set" check is needed here, unlike
-    /// `collapseDelay`'s `after10` default.
+    /// Legacy flag from when the shortcut was the fixed ⌃⌥S. `hotKey` is now the source
+    /// of truth and keeps this value in step with itself; it survives only so an existing
+    /// install that had the fixed shortcut on migrates to ⌃⌥S instead of to nothing.
+    /// Default `false`: an app that grabs a global hotkey without being asked is rude.
     public var useGlobalHotKey: Bool {
         get { defaults.bool(forKey: Self.useGlobalHotKeyKey) }
         set { defaults.set(newValue, forKey: Self.useGlobalHotKeyKey) }
@@ -53,6 +60,35 @@ public final class Preferences {
     public var showOnlyMenuBarApps: Bool {
         get { defaults.bool(forKey: Self.showOnlyMenuBarAppsKey) }
         set { defaults.set(newValue, forKey: Self.showOnlyMenuBarAppsKey) }
+    }
+
+    /// The global shortcut, or `nil` for "no shortcut". This replaces the fixed ⌃⌥S:
+    /// having a combination *is* the on-state, so there is no separate checkbox left to
+    /// disagree with it.
+    ///
+    /// Migration: with nothing stored yet, a user who had the old fixed shortcut switched
+    /// on (`useGlobalHotKey`) keeps ⌃⌥S; everyone else starts without one. A stored value
+    /// that fails validation is treated as no shortcut rather than handed to Carbon —
+    /// a hand-edited defaults file must not be able to grab a bare letter globally.
+    public var hotKey: HotKeyCombo? {
+        get {
+            guard defaults.object(forKey: Self.hotKeyKeyCodeKey) != nil else {
+                return useGlobalHotKey ? .legacyDefault : nil
+            }
+            let code = defaults.integer(forKey: Self.hotKeyKeyCodeKey)
+            guard code >= 0, code <= Int(UInt16.max) else { return nil }
+            let combo = HotKeyCombo(keyCode: UInt16(code),
+                                    modifiers: UInt(bitPattern: defaults.integer(forKey: Self.hotKeyModifiersKey)))
+            return combo.isValid ? combo : nil
+        }
+        set {
+            defaults.set(newValue.map { Int($0.keyCode) } ?? Self.noHotKeyCode,
+                         forKey: Self.hotKeyKeyCodeKey)
+            defaults.set(newValue.map { Int(bitPattern: $0.modifiers) } ?? 0,
+                         forKey: Self.hotKeyModifiersKey)
+            // Keep the legacy flag in step so nothing downstream reads a stale "on".
+            useGlobalHotKey = newValue != nil
+        }
     }
 }
 

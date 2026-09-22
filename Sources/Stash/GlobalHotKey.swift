@@ -1,8 +1,9 @@
+import AppKit
 import Carbon.HIToolbox
 import Foundation
+import StashCore
 
-/// Wraps Carbon's `RegisterEventHotKey` for a single, fixed combination: ⌃⌥S
-/// (`kVK_ANSI_S` with `controlKey | optionKey`).
+/// Wraps Carbon's `RegisterEventHotKey` for whichever combination the user recorded.
 ///
 /// Route verified on this machine on a bare CLT build with no entitlements:
 /// `InstallEventHandler` and `RegisterEventHotKey` both return status 0.
@@ -41,13 +42,26 @@ final class GlobalHotKey: @unchecked Sendable {
         unregister()
     }
 
-    /// Registers ⌃⌥S. Returns `false` if the combination is already claimed by another
+    /// The `OSStatus` the last `RegisterEventHotKey` returned. Kept so a failure can be
+    /// reported as a number rather than as "it didn't work" — `-9878`
+    /// (`eventHotKeyExistsErr`) means another app already holds the combination.
+    private(set) var lastRegisterStatus: OSStatus = noErr
+
+    /// Registers `combo`. Returns `false` if the combination is already claimed by another
     /// app, or if installing the event handler otherwise fails — never a crash, never a
-    /// silent no-op. The caller (`AppDelegate`) is responsible for turning the "use
-    /// hotkey" preference back off when this fails, so the checkbox never claims a
-    /// hotkey is active when it isn't.
+    /// silent no-op. The caller (`AppDelegate`) reports that back up to the settings
+    /// model, which restores the previous combination, so the recorder field never shows
+    /// a shortcut that was never actually registered.
     @discardableResult
-    func register() -> Bool {
+    func register(_ combo: HotKeyCombo) -> Bool {
+        register(keyCode: combo.keyCode, modifiers: combo.modifiers)
+    }
+
+    /// - Parameter modifiers: Cocoa `NSEvent.ModifierFlags` raw value, as recorded from
+    ///   the event. Translated to Carbon's own bits here — that translation belongs with
+    ///   the Carbon call, not with the storage type.
+    @discardableResult
+    func register(keyCode: UInt16, modifiers: UInt) -> Bool {
         unregister()
         Self.activeInstance = self
 
@@ -71,13 +85,14 @@ final class GlobalHotKey: @unchecked Sendable {
         let hotKeyID = EventHotKeyID(signature: Self.signature, id: 1)
         var ref: EventHotKeyRef?
         let registerStatus = RegisterEventHotKey(
-            UInt32(kVK_ANSI_S),
-            UInt32(controlKey | optionKey),
+            UInt32(keyCode),
+            Self.carbonModifiers(from: modifiers),
             hotKeyID,
             GetApplicationEventTarget(),
             0,
             &ref
         )
+        lastRegisterStatus = registerStatus
         guard registerStatus == noErr, let ref else {
             if let eventHandlerRef {
                 RemoveEventHandler(eventHandlerRef)
@@ -108,6 +123,18 @@ final class GlobalHotKey: @unchecked Sendable {
     /// to the main queue explicitly anyway rather than leaning on that — the same
     /// `DispatchQueue.main.async` idiom `AppDelegate.rebuild()` already uses to call back
     /// into `@MainActor` code from a plain, non-isolated callback closure.
+    /// Cocoa modifier bits to Carbon's. The two sets are unrelated integers; there is no
+    /// shared header, so this mapping is written out rather than cast.
+    static func carbonModifiers(from cocoa: UInt) -> UInt32 {
+        let flags = NSEvent.ModifierFlags(rawValue: cocoa)
+        var carbon: UInt32 = 0
+        if flags.contains(.command) { carbon |= UInt32(cmdKey) }
+        if flags.contains(.option)  { carbon |= UInt32(optionKey) }
+        if flags.contains(.control) { carbon |= UInt32(controlKey) }
+        if flags.contains(.shift)   { carbon |= UInt32(shiftKey) }
+        return carbon
+    }
+
     fileprivate func fire() {
         DispatchQueue.main.async { [onTrigger] in
             onTrigger()

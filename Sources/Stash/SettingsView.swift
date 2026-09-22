@@ -42,24 +42,13 @@ final class SettingsModel: ObservableObject {
             }
         }
     }
-    @Published var useGlobalHotKey: Bool {
-        didSet {
-            guard !isReconcilingHotKeyPreference else { return }
-            preferences.useGlobalHotKey = useGlobalHotKey
-            // May itself flip the preference back to `false` — `AppDelegate`'s
-            // `syncHotKeyRegistration` does exactly that when Carbon registration fails
-            // (the combination is already taken by another app). Read the real value
-            // back afterwards so this checkbox never keeps claiming a hotkey that isn't
-            // actually active. Same reconciliation pattern as `launchAtLogin` above.
-            onHotKeyPreferenceChanged()
-            let actual = preferences.useGlobalHotKey
-            if actual != useGlobalHotKey {
-                isReconcilingHotKeyPreference = true
-                useGlobalHotKey = actual
-                isReconcilingHotKeyPreference = false
-            }
-        }
-    }
+    /// The recorded global shortcut, or `nil` for none. Read-only from the view: it is
+    /// only ever changed through `setHotKey(_:)`, which refuses to show a combination the
+    /// system did not actually hand us.
+    @Published private(set) var hotKey: HotKeyCombo?
+    /// A Dutch line under the shortcut field — a refused combination or a failed
+    /// registration. `nil` when there is nothing to say.
+    @Published var hotKeyMessage: String?
     /// "Toon alleen apps met een menubalk-icoon". Turning this on for the first time
     /// requests the Accessibility permission; `AXIsProcessTrustedWithOptions` returns
     /// immediately without waiting for the user, so right after asking, trust is still
@@ -93,24 +82,24 @@ final class SettingsModel: ObservableObject {
     private let hidden: HiddenSet
     private let preferences: Preferences
     private let onChange: () -> Void
-    private let onHotKeyPreferenceChanged: () -> Void
+    /// Applies `preferences.hotKey` to the system and reports whether that actually
+    /// worked. `false` means Carbon refused the combination.
+    private let onHotKeyChanged: () -> Bool
     private var isReconcilingLaunchAtLogin = false
-    private var isReconcilingHotKeyPreference = false
     private var isReconcilingMenuBarFilter = false
 
     init(inventory: AppInventory,
          hidden: HiddenSet,
          preferences: Preferences,
          onChange: @escaping () -> Void,
-         onHotKeyPreferenceChanged: @escaping () -> Void) {
+         onHotKeyChanged: @escaping () -> Bool) {
         self.inventory = inventory
         self.hidden = hidden
         self.preferences = preferences
         self.onChange = onChange
-        self.onHotKeyPreferenceChanged = onHotKeyPreferenceChanged
+        self.onHotKeyChanged = onHotKeyChanged
         self.collapseDelay = preferences.collapseDelay
         self.launchAtLogin = preferences.launchAtLogin
-        self.useGlobalHotKey = preferences.useGlobalHotKey
         self.showOnlyMenuBarApps = preferences.showOnlyMenuBarApps
         refresh()
     }
@@ -125,8 +114,11 @@ final class SettingsModel: ObservableObject {
         visibilities = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, hidden.visibility(for: $0.id)) })
         collapseDelay = preferences.collapseDelay
         launchAtLogin = preferences.launchAtLogin
-        useGlobalHotKey = preferences.useGlobalHotKey
         showOnlyMenuBarApps = preferences.showOnlyMenuBarApps
+        // `refresh()` must reload everything that is persisted, or the window shows a
+        // stale value the second time it is opened.
+        hotKey = preferences.hotKey
+        hotKeyMessage = nil
         menuBarOwners = inventory.menuBarOwners
     }
 
@@ -141,6 +133,37 @@ final class SettingsModel: ObservableObject {
     }
 
     func icon(for bundleID: String) -> NSImage? { inventory.icon(for: bundleID) }
+
+    /// Stores and registers a new shortcut, or clears it with `nil`.
+    ///
+    /// Same "a control must not lie" reconciliation as `launchAtLogin` and
+    /// `showOnlyMenuBarApps`: the field only ends up showing a combination once Carbon has
+    /// confirmed it. A combination without ⌘/⌥/⌃ is refused outright, and a registration
+    /// that fails — another app holds it — puts the previous one back, re-registers it,
+    /// and says so in Dutch instead of failing silently.
+    func setHotKey(_ combo: HotKeyCombo?) {
+        if let combo, let reason = combo.rejectionReason {
+            hotKeyMessage = reason
+            return
+        }
+
+        let previous = preferences.hotKey
+        guard combo != previous else {
+            hotKeyMessage = nil
+            return
+        }
+
+        preferences.hotKey = combo
+        guard onHotKeyChanged() else {
+            preferences.hotKey = previous
+            _ = onHotKeyChanged()
+            hotKey = preferences.hotKey
+            hotKeyMessage = "Deze combinatie is al in gebruik door een andere app."
+            return
+        }
+        hotKey = preferences.hotKey
+        hotKeyMessage = nil
+    }
 }
 
 struct SettingsView: View {
@@ -384,8 +407,28 @@ struct GeneralTab: View {
     private var hotKeySection: some View {
         VStack(alignment: .leading, spacing: 9) {
             sectionHeader("SNELTOETS")
-            Toggle("Sneltoets ⌃⌥S gebruiken", isOn: $model.useGlobalHotKey)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 10) {
+                Text("Verbergen en tonen")
+                    .font(.system(size: 12.5))
+                Spacer()
+                HotKeyRecorderField(
+                    combo: model.hotKey,
+                    onRecord: { model.setHotKey($0) },
+                    onClear: { model.setHotKey(nil) }
+                )
+            }
+            if let message = model.hotKeyMessage {
+                Text(message)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text("Klik op het veld en druk de combinatie die je wil. Escape annuleert. Is "
+                 + "hij al door een andere app bezet, dan zegt Stash dat meteen in plaats "
+                 + "van stil niets te doen.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -420,7 +463,27 @@ struct GeneralTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            permissionStatus
         }
+    }
+
+    /// Reports what the sweep actually found, rather than what the checkbox claims. With
+    /// no permission there is no count to show — say that instead of showing a zero that
+    /// would read as "no app has an icon".
+    private var permissionStatus: some View {
+        let trusted = MenuBarOwners.isTrusted
+        let found = model.menuBarOwners?.count
+        return HStack(spacing: 7) {
+            Circle()
+                .fill(trusted ? Color.green : Color.secondary)
+                .frame(width: 7, height: 7)
+            Text(trusted && found != nil
+                 ? "Toestemming verleend · \(found!) apps met een icoon gevonden"
+                 : "Geen toestemming — de volledige lijst blijft staan")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 2)
     }
 
     private var footer: some View {
