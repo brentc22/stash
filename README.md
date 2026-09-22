@@ -1,16 +1,20 @@
 # Stash
 
-Stash hides macOS menu bar icons behind a single chevron, so a crowded bar collapses to
-one click. It targets **macOS 27**, the release that broke this whole category of app. Ice is the
-one measured here — it is what I ran until it stopped working, and the log evidence below
-is Ice's. Bartender, Hidden Bar and Dozer were not tested, but they are built on the same
-removed mechanism, so expect the same outcome.
+Stash hides macOS menu bar icons behind a single arrow, so a crowded bar collapses to
+one click. It targets **macOS 27**, the release that broke this whole category of app at once. Some
+of them have since come back: Bartender (Golden Gate beta), Thaw (2.0) and Brow all
+rebuilt on the new architecture. Ice, Hidden Bar, Barbee, Sane Bar and Glow are still
+broken. Ice is the one measured here — it is what I ran until it stopped working, and the
+log evidence below is Ice's.
+
+Stash is the open source option next to those: the same job, nothing to buy, nothing to
+sign in to, and the research it is built on is in this repository.
 
 <p>
-  <img src="docs/images/menubar-collapsed.png" alt="Menu bar with Stash's chevron collapsed, hiding several status items" width="420">
+  <img src="docs/images/menubar-collapsed.png" alt="Menu bar with Stash's arrow collapsed, hiding several status items" width="420">
 </p>
 
-*Collapsed: only the chevron and a handful of apps are visible. Click it and the rest
+*Collapsed: only the arrow and a handful of apps are visible. Click it and the rest
 reappear; click again and they're gone.*
 
 ## Why the existing tools stopped working
@@ -38,11 +42,12 @@ further changes make the classic workarounds fail outright:
   34 times in a single minute. The spacer items are actively filtered out of the bar
   they are trying to control.
 
-None of this is a bug in Ice, Bartender or any of the others. It's a rewrite that removed
-the implementation detail their entire category depended on, and there is no public
-replacement for what they used to do.
+None of this was a bug in Ice, Bartender or any of the others. It was a rewrite that
+removed the implementation detail their entire category depended on, with no public
+replacement for it. The apps that work again did not patch around it — they were rebuilt
+on something else, which is what this repository is about too.
 
-macOS 27 does ship its own overflow chevron (`•••`), but it decides for itself what
+macOS 27 does ship its own overflow button (`•••`), but it decides for itself what
 collapses. There is no supported way to choose per app what gets hidden.
 
 ## How Stash works instead
@@ -60,7 +65,7 @@ that assertion with one carrying a different allowlist. Quitting Stash invalidat
 which hands every icon straight back.
 
 This is a private API, not a stable contract. If Apple changes or removes it,
-`STMenuBarShim.isAvailable` returns false: the chevron renders as a warning triangle, the
+`STMenuBarShim.isAvailable` returns false: the arrow renders as a warning triangle, the
 toggle does nothing, and no apps get hidden. It does not crash, and it does not touch
 anything else on the system.
 
@@ -77,7 +82,7 @@ Both documents are written in Dutch.
 |---|---|
 | `MenuBarShim` (Objective-C) | wraps the private `MenuBarClientCore` framework via `dlopen` + runtime lookup |
 | `StashCore` (Swift) | pure logic: app inventory − hidden set → allowlist; persistence; assertion lifecycle |
-| `Stash` (AppKit + SwiftUI) | chevron status item, settings window, accessory app |
+| `Stash` (AppKit + SwiftUI) | arrow status item, settings window, accessory app |
 
 Swift 6.4, SwiftPM, no Xcode project.
 
@@ -85,7 +90,7 @@ Swift 6.4, SwiftPM, no Xcode project.
   <img src="docs/images/menubar-expanded.png" alt="The same menu bar expanded, with the previously hidden status items visible again" width="420">
 </p>
 
-*Expanded: the chevron flips and everything comes back.*
+*Expanded: the arrow flips and everything comes back.*
 
 ## Limitations
 
@@ -117,10 +122,10 @@ open /Applications/Stash.app
 to `/Applications`.
 
 **The `/Applications` location is a real requirement, not a suggestion.** Stash keeps its
-own chevron visible only when it runs as the copy of `com.brentc22.Stash` that
+own arrow visible only when it runs as the copy of `com.brentc22.Stash` that
 LaunchServices resolves for that bundle identifier — in practice, the one in
 `/Applications`. Run the binary from anywhere else and everything else still works — the
-chevron reacts to clicks, other apps' icons hide and come back — but the system never
+arrow reacts to clicks, other apps' icons hide and come back — but the system never
 draws Stash's own icon, so there is nothing left to click.
 
 ## Requirements
@@ -149,7 +154,7 @@ Resources/make-icon.sh  # regenerate Resources/Stash.icns
 ```
 
 Two things about the plain `swift build` / `swift run` binary: it has no app bundle, so
-its own chevron never renders (see Install, above), and with no bundle identifier
+its own arrow never renders (see Install, above), and with no bundle identifier
 `UserDefaults.standard` writes to a different domain than the installed app reads, so
 settings made there don't show up in the real one. Use `make install` when you want to
 see the real thing running.
@@ -160,7 +165,7 @@ those measurements ambiguous.
 
 ## Settings
 
-Right-click the chevron for "Instellingen…" (Settings): a checklist of every app Stash
+Right-click the arrow for "Instellingen…" (Settings): a checklist of every app Stash
 has seen running (apps not running right now are marked *niet actief*), an auto-collapse
 delay, and a "Starten bij inloggen" (start at login) toggle backed by `SMAppService`.
 
@@ -174,7 +179,7 @@ delay, and a "Starten bij inloggen" (start at login) toggle backed by `SMAppServ
   unregisters the `SMAppService` login item cleanly; quitting first without doing this
   leaves the login item registered, so macOS keeps launching Stash at login even after
   the app itself is gone.
-- **Quit Stash** — right-click the chevron and choose "Stash stoppen". This lifts the
+- **Quit Stash** — right-click the arrow and choose "Stash stoppen". This lifts the
   assessment-mode assertion and hands every hidden icon back before the app disappears.
 - **Remove the app**: `rm -rf /Applications/Stash.app`.
 - **Remove its saved settings**: `rm -f ~/Library/Preferences/com.brentc22.Stash.plist`.

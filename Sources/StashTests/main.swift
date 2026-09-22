@@ -122,7 +122,7 @@ T.test("eigen bundle id zit er altijd in, ook als hij verborgen is gemarkeerd") 
         state: .collapsed,
         ownBundleID: ownID
     )
-    T.expect(result.contains(ownID), "de app mag z'n eigen chevron nooit verbergen")
+    T.expect(result.contains(ownID), "de app mag z'n eigen pijltje nooit verbergen")
 }
 
 T.test("een app die start terwijl je ingeklapt bent verdwijnt niet") {

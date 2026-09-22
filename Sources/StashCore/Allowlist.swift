@@ -15,7 +15,7 @@ public enum Allowlist {
     ///   - hidden: what the user has checked to hide.
     ///   - state: collapsed or expanded.
     ///   - ownBundleID: our own ID. Always included, regardless of everything else —
-    ///     without the chevron the user cannot expand.
+    ///     without the arrow the user cannot expand.
     public static func compute(running: Set<String>,
                                hidden: Set<String>,
                                state: BarState,

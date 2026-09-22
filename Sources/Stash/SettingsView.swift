@@ -92,7 +92,7 @@ struct SettingsView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Verbergen").font(.headline)
-            Text("Vink aan wat achter de chevron verdwijnt. Een app met meerdere iconen "
+            Text("Vink aan wat achter het pijltje verdwijnt. Een app met meerdere iconen "
                  + "gaat als geheel weg — dat is een beperking van macOS, niet van Stash.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
