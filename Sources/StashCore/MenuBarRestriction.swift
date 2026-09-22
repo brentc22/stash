@@ -8,8 +8,9 @@ public enum MenuBarRestrictionError: Error {
 
 public protocol MenuBarRestricting: AnyObject {
     var isAvailable: Bool { get }
-    /// Replaces the current restriction. Idempotent. Swapping the token happens
-    /// synchronously; `completion` only reports whether the system complained afterwards.
+    /// Replaces the current restriction. Idempotent. The new token becomes active
+    /// synchronously; the old one is only invalidated once `completion` confirms
+    /// activation actually succeeded, and is restored if it failed.
     func apply(allowing bundleIDs: Set<String>, completion: ((Error?) -> Void)?)
     /// Lifts every restriction; the bar is fully redrawn.
     func clear()
@@ -34,13 +35,33 @@ public final class MenuBarRestriction: MenuBarRestricting, @unchecked Sendable {
             return
         }
 
+        lock.lock()
+        let old = token
+        lock.unlock()
+
+        // `activate` returns its token synchronously; the completion closure below only
+        // fires afterward. The box exists purely to carry that synchronous return value
+        // into a closure that was necessarily created before the value existed.
+        let box = TokenBox()
+
         let created = STMenuBarShim.activate(
             withAllowedBundleIdentifiers: bundleIDs.sorted(),
             allowedSystemItems: SystemItems.all
-        ) { error in
+        ) { [weak self] error in
+            guard let self, let createdToken = box.token else { return }
             if let error {
+                // Activation failed after the fact: hand control back to the old
+                // assertion — but only if nothing newer has replaced this call's token
+                // in the meantime. A late error from an older `apply` must never clobber
+                // a token a later `apply` already installed.
+                self.lock.lock()
+                if self.token === createdToken {
+                    self.token = old
+                }
+                self.lock.unlock()
                 completion?(MenuBarRestrictionError.activationFailed(error.localizedDescription))
             } else {
+                STMenuBarShim.invalidate(old)
                 completion?(nil)
             }
         }
@@ -49,14 +70,16 @@ public final class MenuBarRestriction: MenuBarRestricting, @unchecked Sendable {
             completion?(MenuBarRestrictionError.unavailable)
             return
         }
+        box.token = created
 
-        // Activate the new one first, only then drop the old one: the bar must never
-        // sit without an active restriction for a moment, or every icon jumps back briefly.
+        // Install the new token right away: the coexistence test established that the
+        // newest assertion wins even while an older one is still technically alive, so
+        // the bar is never without an active restriction for a moment. The old token is
+        // only invalidated once the completion above confirms activation actually
+        // succeeded — see the rollback branch for what happens if it didn't.
         lock.lock()
-        let old = token
         token = created
         lock.unlock()
-        STMenuBarShim.invalidate(old)
     }
 
     public func clear() {
@@ -68,4 +91,12 @@ public final class MenuBarRestriction: MenuBarRestricting, @unchecked Sendable {
     }
 
     deinit { clear() }
+}
+
+/// Carries the token `activate` returns synchronously into its own completion closure —
+/// that closure is necessarily created before the value exists and needs to read it once
+/// set. `@unchecked Sendable`: the completion always fires strictly after the synchronous
+/// return that sets `token`, never before or during it.
+private final class TokenBox: @unchecked Sendable {
+    var token: AnyObject?
 }

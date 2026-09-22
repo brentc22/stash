@@ -10,13 +10,14 @@ T.test("shim ziet MenuBarClientCore") {
              "MenuBarClientCore moet laadbaar zijn op macOS 27")
 }
 
-/// Applies an allowlist, waits for the bar to redraw, and returns the count
-/// MenuBarAgent logged. 2 seconds is generous: in the 2026-09-22 probe the new
-/// count showed up in the log within ~200 ms.
+/// Applies an allowlist and returns the count MenuBarAgent logged for that specific
+/// apply. `since` is captured immediately before the call so the probe can prove the
+/// reading it returns was caused by this apply, not a stale one left over from a
+/// previous test.
 func applyAndCount(_ restriction: MenuBarRestriction, _ allowed: Set<String>) -> Int? {
+    let since = Date()
     restriction.apply(allowing: allowed)
-    Thread.sleep(forTimeInterval: 2)
-    return MenuBarProbe.lastTrailingItemsCount()
+    return MenuBarProbe.lastTrailingItemsCount(since: since)
 }
 
 let allRunning = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
@@ -28,11 +29,15 @@ T.test("lege allowlist levert minder items op dan een volle") {
         return
     }
 
-    let wide = applyAndCount(restriction, allRunning)
+    // Narrow first, then wide: the natural pre-test state is never already "just
+    // system items", so this transition is guaranteed to be a real, observable one.
+    // Measuring wide first risks landing on a state that already looks like
+    // "everything visible" — no redraw happens, and the log oracle waits forever for
+    // an event that was never coming. Measured on 2026-09-22: applying the full
+    // allowlist as the very first call of the whole run produced no new log line at
+    // all for over 40 seconds, because the natural bar already showed everything.
     let narrow = applyAndCount(restriction, [])
-
-    restriction.clear()
-    Thread.sleep(forTimeInterval: 2)
+    let wide = applyAndCount(restriction, allRunning)
 
     guard let wide, let narrow else {
         T.expect(false, "log gaf geen telling terug — draait MenuBarAgent?")
@@ -44,11 +49,12 @@ T.test("lege allowlist levert minder items op dan een volle") {
 T.test("vervangen laat geen oude assertion achter") {
     let restriction = MenuBarRestriction()
 
+    // Safe to start with collapsed here: the previous test's last measurement (wide)
+    // already confirmed the bar had settled into an "everything visible" state before
+    // returning, so this apply([]) is a real, observable transition, not a race against
+    // an unconfirmed prior change.
     let collapsed = applyAndCount(restriction, [])
     let expanded = applyAndCount(restriction, allRunning)
-
-    restriction.clear()
-    Thread.sleep(forTimeInterval: 2)
 
     guard let collapsed, let expanded else {
         T.expect(false, "log gaf geen telling terug")
@@ -61,12 +67,24 @@ T.test("vervangen laat geen oude assertion achter") {
 T.test("clear zet de balk volledig terug") {
     let restriction = MenuBarRestriction()
 
-    let baseline = applyAndCount(restriction, allRunning)
+    // The baseline must come from `clear()`'s own resulting count, not from applying
+    // `allRunning` and reading that back: `allRunning` is our own approximation of what's
+    // visible, built from NSWorkspace bundle ids. A helper process with a real menu bar
+    // item but no bundle id NSWorkspace reports would be invisible to that allowlist,
+    // silently missing from a `wide`-based baseline, and then reappear after the real
+    // `clear()` below — failing this test for a correct implementation. `clear()` asks
+    // the OS to draw everything, so its own count is the true unrestricted baseline.
+    // A narrow allowlist is applied first purely to force a state change, so the
+    // `clear()` that follows actually produces a fresh, observable log line.
     _ = applyAndCount(restriction, [])
-
+    let baselineSince = Date()
     restriction.clear()
-    Thread.sleep(forTimeInterval: 2)
-    let restored = MenuBarProbe.lastTrailingItemsCount()
+    let baseline = MenuBarProbe.lastTrailingItemsCount(since: baselineSince)
+
+    _ = applyAndCount(restriction, [])
+    let restoredSince = Date()
+    restriction.clear()
+    let restored = MenuBarProbe.lastTrailingItemsCount(since: restoredSince)
 
     guard let baseline, let restored else {
         T.expect(false, "log gaf geen telling terug")

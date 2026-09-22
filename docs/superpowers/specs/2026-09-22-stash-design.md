@@ -160,20 +160,24 @@ targets, dus dit is een eigen target waar het Swift-target van afhangt.
 ```swift
 protocol MenuBarRestricting {
     var isAvailable: Bool { get }
-    func apply(allowing bundleIDs: Set<String>) async throws
+    func apply(allowing bundleIDs: Set<String>, completion: ((Error?) -> Void)?)
     func clear()
 }
 ```
 
-`apply` is idempotent en vervangt de vorige toestand. Volgorde binnen `apply`:
+`apply` is idempotent en vervangt de vorige toestand. **Gemeten op 2026-09-22 op macOS 27.0:**
+twee assertions kunnen wél tegelijk bestaan, en de nieuwste wint — de balk volgt altijd de
+laatst geactiveerde assertion, ook terwijl een oudere nog niet is opgeruimd. Volgorde binnen
+`apply`:
 
-1. Nieuwe assertion activeren met de nieuwe allowlist.
-2. Pas ná een succesvolle completion de oude invalideren.
-
-Die volgorde staat er om flikkeren te voorkomen: de balk mag geen moment zonder actieve
-restrictie zitten, anders springen alle iconen even terug. **Open punt voor fase 1:** of twee
-assertions tegelijk mogen bestaan is niet gemeten. Zo niet, dan wordt het invalidate-dan-activate
-en accepteren we een frame flikkering; de test in §8.1 stelt dit vast vóór de rest gebouwd wordt.
+1. Nieuwe assertion activeren; de token wordt meteen actief. Dit is veilig: de balk volgt
+   sowieso de nieuwste, dus er zit geen moment zonder — of met een verkeerde — restrictie
+   tussen. Geen flikkering nodig.
+2. Pas als `completion` succes meldt, wordt de oude assertion geïnvalideerd.
+3. Meldt `completion` een fout, dan gaat de oude assertion niet verloren: `token` wordt
+   teruggezet naar de oude assertion, onder dezelfde lock en alleen als niets nieuwers
+   ondertussen alweer geïnstalleerd is — een late fout van een oude `apply`-aanroep mag nooit
+   een token overschrijven dat een latere `apply` al heeft neergezet.
 
 `allowedSystemItems` is altijd `0...255`. Nooit 0...63 — dan verdwijnt Screen Mirroring.
 
