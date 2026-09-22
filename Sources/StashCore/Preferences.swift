@@ -20,6 +20,7 @@ public enum CollapseDelay: Int, CaseIterable, Sendable {
 public final class Preferences {
 
     private static let collapseDelayKey = "collapseDelaySeconds"
+    private static let useGlobalHotKeyKey = "useGlobalHotKey"
 
     private let defaults: UserDefaults
 
@@ -33,6 +34,15 @@ public final class Preferences {
             return CollapseDelay(rawValue: defaults.integer(forKey: Self.collapseDelayKey)) ?? .after10
         }
         set { defaults.set(newValue.rawValue, forKey: Self.collapseDelayKey) }
+    }
+
+    /// Whether ⌃⌥S should toggle the bar. Default `false`: an app that grabs a global
+    /// hotkey without being asked is rude. `bool(forKey:)` already returns `false` for an
+    /// absent key, so no extra "has this ever been set" check is needed here, unlike
+    /// `collapseDelay`'s `after10` default.
+    public var useGlobalHotKey: Bool {
+        get { defaults.bool(forKey: Self.useGlobalHotKeyKey) }
+        set { defaults.set(newValue, forKey: Self.useGlobalHotKeyKey) }
     }
 }
 

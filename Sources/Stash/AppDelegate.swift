@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: StatusItemController!
     private var collapseTimer: CollapseTimer!
     private var settingsWindow: SettingsWindowController!
+    private var hotKey: GlobalHotKey!
     private var state: BarState = .collapsed
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -55,14 +56,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         inventory.start()
         rebuild()
 
+        // Created before `SettingsModel` below: its `init` calls `refresh()`, which sets
+        // `useGlobalHotKey` and fires that property's `didSet` — which, through
+        // `onHotKeyPreferenceChanged`, reaches `syncHotKeyRegistration()`. That force-
+        // unwraps `hotKey`; building it after `SettingsModel` crashed on every launch.
+        hotKey = GlobalHotKey { [weak self] in self?.toggle() }
+
         let model = SettingsModel(
             inventory: inventory,
             hidden: hidden,
-            preferences: preferences
-        ) { [weak self] in
-            self?.rebuild()
-        }
+            preferences: preferences,
+            onChange: { [weak self] in self?.rebuild() },
+            onHotKeyPreferenceChanged: { [weak self] in self?.syncHotKeyRegistration() }
+        )
         settingsWindow = SettingsWindowController(model: model)
+
+        // Same toggle as a click on the arrow — one path, no second implementation.
+        syncHotKeyRegistration()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -103,6 +113,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showSettings() {
         settingsWindow.show()
+    }
+
+    /// Registers or unregisters ⌃⌥S to match `preferences.useGlobalHotKey`. Called once
+    /// at launch and again every time the checkbox in settings changes.
+    ///
+    /// If registration fails — another app already holds the combination — this is not a
+    /// crash and not a silent failure: log it and flip the preference back to off, so the
+    /// checkbox never keeps claiming a hotkey that isn't actually active (the same
+    /// mistake as F18 from the previous round: a checkbox asserting something untrue).
+    private func syncHotKeyRegistration() {
+        guard preferences.useGlobalHotKey else {
+            hotKey.unregister()
+            return
+        }
+        guard hotKey.register() else {
+            NSLog("Stash: kon globale sneltoets ⌃⌥S niet registreren — "
+                  + "waarschijnlijk al in gebruik door een andere app")
+            preferences.useGlobalHotKey = false
+            return
+        }
     }
 
     private func quit() {

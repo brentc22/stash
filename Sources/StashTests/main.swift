@@ -325,4 +325,20 @@ T.test("een app in beide sets telt als altijd-verborgen") {
     }
 }
 
+T.test("sneltoets-voorkeur staat standaard uit en reist rond door UserDefaults") {
+    withTestDefaults { defaults in
+        let prefs = Preferences(defaults: defaults)
+        T.expect(!prefs.useGlobalHotKey, "standaard uit: een app die ongevraagd een "
+                 + "globale toets inpikt is onbeleefd")
+
+        prefs.useGlobalHotKey = true
+        T.expect(Preferences(defaults: defaults).useGlobalHotKey,
+                 "aan-stand hoort opnieuw te laden als aan")
+
+        prefs.useGlobalHotKey = false
+        T.expect(!Preferences(defaults: defaults).useGlobalHotKey,
+                 "uit-stand hoort opnieuw te laden als uit")
+    }
+}
+
 T.finish()

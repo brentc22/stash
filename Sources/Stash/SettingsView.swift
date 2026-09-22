@@ -39,23 +39,46 @@ final class SettingsModel: ObservableObject {
             }
         }
     }
+    @Published var useGlobalHotKey: Bool {
+        didSet {
+            guard !isReconcilingHotKeyPreference else { return }
+            preferences.useGlobalHotKey = useGlobalHotKey
+            // May itself flip the preference back to `false` — `AppDelegate`'s
+            // `syncHotKeyRegistration` does exactly that when Carbon registration fails
+            // (the combination is already taken by another app). Read the real value
+            // back afterwards so this checkbox never keeps claiming a hotkey that isn't
+            // actually active. Same reconciliation pattern as `launchAtLogin` above.
+            onHotKeyPreferenceChanged()
+            let actual = preferences.useGlobalHotKey
+            if actual != useGlobalHotKey {
+                isReconcilingHotKeyPreference = true
+                useGlobalHotKey = actual
+                isReconcilingHotKeyPreference = false
+            }
+        }
+    }
 
     private let inventory: AppInventory
     private let hidden: HiddenSet
     private let preferences: Preferences
     private let onChange: () -> Void
+    private let onHotKeyPreferenceChanged: () -> Void
     private var isReconcilingLaunchAtLogin = false
+    private var isReconcilingHotKeyPreference = false
 
     init(inventory: AppInventory,
          hidden: HiddenSet,
          preferences: Preferences,
-         onChange: @escaping () -> Void) {
+         onChange: @escaping () -> Void,
+         onHotKeyPreferenceChanged: @escaping () -> Void) {
         self.inventory = inventory
         self.hidden = hidden
         self.preferences = preferences
         self.onChange = onChange
+        self.onHotKeyPreferenceChanged = onHotKeyPreferenceChanged
         self.collapseDelay = preferences.collapseDelay
         self.launchAtLogin = preferences.launchAtLogin
+        self.useGlobalHotKey = preferences.useGlobalHotKey
         refresh()
     }
 
@@ -66,6 +89,7 @@ final class SettingsModel: ObservableObject {
         visibilities = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, hidden.visibility(for: $0.id)) })
         collapseDelay = preferences.collapseDelay
         launchAtLogin = preferences.launchAtLogin
+        useGlobalHotKey = preferences.useGlobalHotKey
     }
 
     func visibility(for bundleID: String) -> AppVisibility {
@@ -177,6 +201,8 @@ struct SettingsView: View {
                 .frame(width: 180)
             }
             Toggle("Starten bij inloggen", isOn: $model.launchAtLogin)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle("Sneltoets ⌃⌥S gebruiken", isOn: $model.useGlobalHotKey)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
