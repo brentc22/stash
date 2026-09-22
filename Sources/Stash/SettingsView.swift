@@ -49,34 +49,36 @@ final class SettingsModel: ObservableObject {
     /// A Dutch line under the shortcut field — a refused combination or a failed
     /// registration. `nil` when there is nothing to say.
     @Published var hotKeyMessage: String?
-    /// "Toon alleen apps met een menubalk-icoon". Turning this on for the first time
-    /// requests the Accessibility permission; `AXIsProcessTrustedWithOptions` returns
-    /// immediately without waiting for the user, so right after asking, trust is still
-    /// whatever it was before. If that isn't `true`, the checkbox must not keep claiming
-    /// an "on" state the system never granted — same reconciliation pattern as
-    /// `launchAtLogin` and `useGlobalHotKey` above, and the same mistake (F18, F12) this
-    /// whole house pattern exists to avoid repeating.
+    /// "Alleen apps met een menubalk-icoon" — the user's *wish*, which survives a
+    /// permission that is not (yet) granted.
+    ///
+    /// It used to snap back to `false` in that case, and that was the bug:
+    /// `AXIsProcessTrustedWithOptions` returns before the user has chosen anything, so the
+    /// wish was discarded a millisecond after it was made, and nothing re-read trust when
+    /// the user came back from System Settings. The checkbox is not lying by staying on —
+    /// `isFilterActive` and the status line right beneath it say plainly whether anything
+    /// is actually being filtered, and the filter starts working by itself the moment
+    /// trust arrives, with no second click.
     @Published var showOnlyMenuBarApps: Bool {
         didSet {
-            guard !isReconcilingMenuBarFilter else { return }
+            // Only a real click may ask for the permission. `refresh()` assigns here too,
+            // and without this guard every window open would re-open the System Settings
+            // prompt for someone who has the wish on but no trust yet — the exact user
+            // this change is meant to help.
+            guard !isReloading else { return }
+            preferences.showOnlyMenuBarApps = showOnlyMenuBarApps
             if showOnlyMenuBarApps, !MenuBarOwners.isTrusted {
                 MenuBarOwners.requestTrust()
-                if !MenuBarOwners.isTrusted {
-                    isReconcilingMenuBarFilter = true
-                    showOnlyMenuBarApps = false
-                    isReconcilingMenuBarFilter = false
-                }
             }
-            preferences.showOnlyMenuBarApps = showOnlyMenuBarApps
-            // Re-sweep whenever this changes, and (via `refresh()`, which also assigns
-            // here) every time the settings window opens — never per render or keystroke.
-            inventory.refreshMenuBarOwners()
-            menuBarOwners = inventory.menuBarOwners
+            refreshTrust()
         }
     }
     /// Cached sweep result, mirrored from `AppInventory` for the view to read. `nil` means
     /// "unknown" (not granted / never swept) and must be treated as "show everything".
     @Published var menuBarOwners: Set<String>?
+    /// Whether macOS currently trusts this exact binary. Re-read whenever the app becomes
+    /// active — that is when the user returns from System Settings.
+    @Published private(set) var isTrusted: Bool = MenuBarOwners.isTrusted
 
     private let inventory: AppInventory
     private let hidden: HiddenSet
@@ -86,7 +88,7 @@ final class SettingsModel: ObservableObject {
     /// worked. `false` means Carbon refused the combination.
     private let onHotKeyChanged: () -> Bool
     private var isReconcilingLaunchAtLogin = false
-    private var isReconcilingMenuBarFilter = false
+    private var isReloading = false
 
     init(inventory: AppInventory,
          hidden: HiddenSet,
@@ -106,20 +108,55 @@ final class SettingsModel: ObservableObject {
 
     /// Reloads the app list and hidden set from the source of truth. Called when the
     /// window is shown, so an app launched while the window was closed still shows up.
-    /// Also where the menu bar ownership sweep runs (via `showOnlyMenuBarApps`'s
-    /// `didSet`) — the settings window opening is one of the two triggers the brief
-    /// specifies, launch/terminate (inside `AppInventory`) being the other.
+    /// Also where the Accessibility trust is re-read and the menu bar ownership sweep
+    /// runs (via `refreshTrust()`) — the settings window opening is one of the triggers
+    /// the brief specifies, launch/terminate (inside `AppInventory`) and the app becoming
+    /// active again being the others.
     func refresh() {
         apps = inventory.knownApps.filter { $0.id != ownBundleID }
         visibilities = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, hidden.visibility(for: $0.id)) })
         collapseDelay = preferences.collapseDelay
         launchAtLogin = preferences.launchAtLogin
+        isReloading = true
         showOnlyMenuBarApps = preferences.showOnlyMenuBarApps
+        isReloading = false
         // `refresh()` must reload everything that is persisted, or the window shows a
-        // stale value the second time it is opened.
+        // stale value the second time it is opened. `refreshTrust()` covers the
+        // Accessibility trust and the sweep result.
         hotKey = preferences.hotKey
         hotKeyMessage = nil
+        refreshTrust()
+    }
+
+    /// The owners set the list should actually filter on — `nil` means "show everything".
+    /// Never derived from the checkbox alone: without the permission there is nothing to
+    /// filter with, and an empty list would leave the user unable to configure anything.
+    var effectiveOwners: Set<String>? {
+        MenuBarOwners.effectiveOwners(wanted: showOnlyMenuBarApps,
+                                      trusted: isTrusted,
+                                      swept: menuBarOwners)
+    }
+
+    /// Whether the wish is currently being honoured. The gap between this and
+    /// `showOnlyMenuBarApps` is exactly what the status line explains.
+    var isFilterActive: Bool { effectiveOwners != nil }
+
+    /// Re-reads the Accessibility trust and, when the filter is both wanted and allowed,
+    /// re-runs the ~263 ms sweep. Called from `init`/`refresh()`, from the "Opnieuw
+    /// controleren" button, and — the case the old flow had no answer for — every time the
+    /// app becomes active again, which is the moment the user comes back from System
+    /// Settings. Deliberately does not sweep when the filter is not wanted: the sweep is
+    /// expensive and its result would go unused.
+    func refreshTrust() {
+        isTrusted = MenuBarOwners.isTrusted
+        if showOnlyMenuBarApps, isTrusted {
+            inventory.refreshMenuBarOwners()
+        }
         menuBarOwners = inventory.menuBarOwners
+    }
+
+    func openAccessibilitySettings() {
+        MenuBarOwners.openSystemSettings()
     }
 
     func visibility(for bundleID: String) -> AppVisibility {
@@ -196,8 +233,7 @@ struct AppsTab: View {
     /// Algemeen tab is on — otherwise `owners` is `nil`, which already means "show
     /// everything".
     private var filteredApps: [KnownApp] {
-        let owners = model.showOnlyMenuBarApps ? model.menuBarOwners : nil
-        return model.apps.filtered(owners: owners,
+        return model.apps.filtered(owners: model.effectiveOwners,
                                    query: model.query,
                                    filter: model.listFilter) { model.visibility(for: $0) }
     }
@@ -460,30 +496,73 @@ struct GeneralTab: View {
                  + "alleen om te zien wélke apps een icoon hebben — verbergen en tonen "
                  + "werkt ook zonder. Geef je geen toestemming, dan blijft de volledige "
                  + "lijst staan.")
-                .font(.caption)
+                .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             permissionStatus
+            if model.showOnlyMenuBarApps, !model.isTrusted {
+                permissionHelp
+            }
         }
     }
 
-    /// Reports what the sweep actually found, rather than what the checkbox claims. With
-    /// no permission there is no count to show — say that instead of showing a zero that
-    /// would read as "no app has an icon".
+    /// Reports what the sweep actually found, rather than what the checkbox wishes for.
+    /// With no permission there is no count to show — say that instead of showing a zero
+    /// that would read as "no app has an icon".
     private var permissionStatus: some View {
-        let trusted = MenuBarOwners.isTrusted
-        let found = model.menuBarOwners?.count
-        return HStack(spacing: 7) {
+        HStack(spacing: 7) {
             Circle()
-                .fill(trusted ? Color.green : Color.secondary)
+                .fill(model.isFilterActive ? Color.green : Color.secondary)
                 .frame(width: 7, height: 7)
-            Text(trusted && found != nil
-                 ? "Toestemming verleend · \(found!) apps met een icoon gevonden"
-                 : "Geen toestemming — de volledige lijst blijft staan")
+            Text(statusText)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button("Opnieuw controleren") { model.refreshTrust() }
+                .controlSize(.small)
         }
         .padding(.top, 2)
+    }
+
+    private var statusText: String {
+        guard model.showOnlyMenuBarApps else {
+            return "Filter staat uit — de volledige lijst wordt getoond"
+        }
+        if let found = model.effectiveOwners?.count {
+            return "Toestemming verleend · \(found) apps met een icoon gevonden"
+        }
+        return "Nog geen toestemming — de volledige lijst blijft staan"
+    }
+
+    /// Shown only while the wish is on but trust is missing — the moment the user is
+    /// actually stuck. The ad-hoc signing trap belongs here, not only in the README:
+    /// nobody opens a README while staring at a switch that is already blue.
+    private var permissionHelp: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("Het filter gaat vanzelf aan zodra de toestemming er is — je hoeft dit "
+                 + "vinkje niet opnieuw aan te klikken.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Staat Stash er al bij mét een blauw schuifje en werkt het tóch niet? "
+                 + "Stash is ad-hoc ondertekend, en macOS koppelt Toegankelijkheid voor "
+                 + "zo'n app aan de cdhash van de binary. Elke nieuwe versie is dus een "
+                 + "nieuwe identiteit: de regel die je ziet hoort bij een binary die niet "
+                 + "meer bestaat. Haal die regel weg met het min-knopje en voeg Stash "
+                 + "opnieuw toe.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Open Systeeminstellingen") { model.openAccessibilitySettings() }
+                .controlSize(.small)
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color.accentColor.opacity(0.10))
+        )
     }
 
     private var footer: some View {

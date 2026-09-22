@@ -527,4 +527,41 @@ T.test("een onbekende keyCode geeft een terugvalnaam, geen lege string") {
     T.equal(combo.displayString, "⌃Toets 200")
 }
 
+T.test("filter wil aan maar zonder toestemming: volledige lijst, niet leeg") {
+    // Dit is precies de val waar de vorige flow in liep: de wens stond aan, de
+    // toestemming was er nog niet, en het resultaat mocht nooit een lege lijst zijn.
+    let owners = MenuBarOwners.effectiveOwners(wanted: true, trusted: false,
+                                               swept: ["com.a"])
+    T.expect(owners == nil, "zonder toestemming is de eigenaars-set onbekend, niet leeg")
+
+    let apps = [
+        KnownApp(id: "com.a", name: "A", isRunning: true),
+        KnownApp(id: "com.b", name: "B", isRunning: true),
+    ]
+    T.equal(apps.filtered(owners: owners, query: "").count, 2,
+            "en onbekend betekent: alles tonen:")
+}
+
+T.test("zodra de toestemming er is werkt dezelfde wens wel, zonder tweede klik") {
+    let swept: Set<String> = ["com.a"]
+    // Zelfde `wanted: true` als hierboven — alleen `trusted` is gewijzigd. De wens hoeft
+    // dus niet opnieuw gezet te worden nadat de gebruiker terugkomt uit Systeeminstellingen.
+    T.equal(MenuBarOwners.effectiveOwners(wanted: true, trusted: true, swept: swept), swept)
+    T.expect(MenuBarOwners.effectiveOwners(wanted: false, trusted: true, swept: swept) == nil,
+             "uitgezet filter mag ook met toestemming niets wegfilteren")
+    T.expect(MenuBarOwners.effectiveOwners(wanted: true, trusted: true, swept: nil) == nil,
+             "toestemming zonder sweep is nog steeds onbekend")
+}
+
+T.test("de wens overleeft een geweigerde toestemming in UserDefaults") {
+    withTestDefaults { defaults in
+        let prefs = Preferences(defaults: defaults)
+        prefs.showOnlyMenuBarApps = true
+        // Geen enkele code mag deze wens terugzetten omdat de toestemming ontbreekt —
+        // dat was de bug: de gebruiker vinkte aan, kwam terug, en het vinkje stond uit.
+        T.expect(Preferences(defaults: defaults).showOnlyMenuBarApps,
+                 "de wens hoort bewaard te blijven, los van de toestemming")
+    }
+}
+
 T.finish()

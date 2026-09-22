@@ -58,4 +58,24 @@ public enum MenuBarOwners {
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         _ = AXIsProcessTrustedWithOptions(options)
     }
+
+    /// Opens System Settings on the Accessibility pane. Without this the user is sent off
+    /// to find it themselves, which is where the previous flow lost them.
+    public static func openSystemSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Which set of owners the settings list should filter on.
+    ///
+    /// The decision is split out as a plain function because it is the rule the whole
+    /// feature hinges on, and it has to hold in the case that previously broke it: the
+    /// user *wants* the filter but has not granted (or has lost) the permission. That
+    /// returns `nil` — "unknown", show everything — and, crucially, does not touch the
+    /// intent. The moment trust arrives the filter switches itself on with no second
+    /// click, because `wanted` was never thrown away.
+    public static func effectiveOwners(wanted: Bool, trusted: Bool, swept: Set<String>?) -> Set<String>? {
+        guard wanted, trusted else { return nil }
+        return swept
+    }
 }

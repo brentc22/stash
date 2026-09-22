@@ -113,6 +113,10 @@ struct HotKeyRecorderField: View {
             } label: {
                 Text(fieldText)
                     .font(.system(size: recorder.isRecording ? 11.5 : 14))
+                    // Never wrap: "Druk nu een toetscombinatie…" is longer than the
+                    // resting width, and a two-line label breaks out of the rounded rect.
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .foregroundStyle(recorder.isRecording ? AnyShapeStyle(Color.accentColor)
                                                           : AnyShapeStyle(.primary))
                     .frame(minWidth: 104, minHeight: 28)

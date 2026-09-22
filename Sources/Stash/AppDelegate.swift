@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: StatusItemController!
     private var collapseTimer: CollapseTimer!
     private var settingsWindow: SettingsWindowController!
+    private var settingsModel: SettingsModel!
     private var hotKey: GlobalHotKey!
     private var state: BarState = .collapsed
 
@@ -68,10 +69,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onChange: { [weak self] in self?.rebuild() },
             onHotKeyChanged: { [weak self] in self?.syncHotKeyRegistration() ?? false }
         )
+        settingsModel = model
         settingsWindow = SettingsWindowController(model: model)
 
         // Same toggle as a click on the arrow — one path, no second implementation.
         syncHotKeyRegistration()
+    }
+
+    /// The Accessibility permission is granted in System Settings, in another process,
+    /// and macOS offers no callback for it. Becoming active again is the only signal there
+    /// is that the user has been there — so re-read trust then. Without this, a user who
+    /// grants the permission sees nothing change until the next launch, which is exactly
+    /// where the previous flow stranded them.
+    func applicationDidBecomeActive(_ notification: Notification) {
+        settingsModel?.refreshTrust()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

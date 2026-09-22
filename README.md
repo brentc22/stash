@@ -198,6 +198,12 @@ identically whether it is on or off. Turning it on for the first time asks macOS
 **Accessibility** permission; declining it, or never turning the checkbox on, costs
 nothing and the settings list simply stays unfiltered.
 
+The checkbox records your *wish*, not the outcome: it stays on while the permission is
+still missing, the status line underneath says so plainly, and the filter starts working
+by itself as soon as trust arrives — Stash re-reads it every time the app becomes active
+again, which is the moment you come back from System Settings. There is also an "Opnieuw
+controleren" button and one that opens the right System Settings pane directly.
+
 **The Accessibility grant does not survive `make install`.** It is tied to the running
 binary's code signature, and `make install` re-signs ad-hoc (`codesign --sign -`) on
 every build, which changes that signature. Concretely observed on this machine: System

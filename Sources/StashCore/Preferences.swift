@@ -53,10 +53,20 @@ public final class Preferences {
         set { defaults.set(newValue, forKey: Self.useGlobalHotKeyKey) }
     }
 
-    /// Whether the settings list should be filtered to apps that actually own a menu bar
-    /// item. Default `false`: this depends on the optional Accessibility permission, and
-    /// Stash must not ask for it unprompted. `bool(forKey:)` already returns `false` for
-    /// an absent key, same as `useGlobalHotKey` above.
+    /// Whether the user *wants* the list filtered to apps that actually own a menu bar
+    /// item — the intent, deliberately not the outcome.
+    ///
+    /// This used to be reset to `false` whenever the permission was not already granted,
+    /// which is exactly when the user had just asked for it: `AXIsProcessTrustedWithOptions`
+    /// returns before the user has chosen anything, so the wish was thrown away a
+    /// millisecond after it was made and nothing re-evaluated it when they came back from
+    /// System Settings. It is kept now, and `MenuBarOwners.effectiveOwners(wanted:trusted:swept:)`
+    /// decides separately whether it may be acted on. No permission still means the full
+    /// list, never an empty one.
+    ///
+    /// Default `false`: this depends on the optional Accessibility permission, and Stash
+    /// must not ask for it unprompted. `bool(forKey:)` already returns `false` for an
+    /// absent key, same as `useGlobalHotKey` above.
     public var showOnlyMenuBarApps: Bool {
         get { defaults.bool(forKey: Self.showOnlyMenuBarAppsKey) }
         set { defaults.set(newValue, forKey: Self.showOnlyMenuBarAppsKey) }
