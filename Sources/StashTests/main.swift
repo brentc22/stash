@@ -5,9 +5,16 @@ import StashCore
 
 print("Stash tests")
 
-T.test("shim ziet MenuBarClientCore") {
-    T.expect(STMenuBarShim.isAvailable(),
-             "MenuBarClientCore moet laadbaar zijn op macOS 27")
+/// Runs `body` against a throwaway `UserDefaults` suite and removes that suite again
+/// afterwards, so no test ever reads what another test persisted.
+func withTestDefaults(_ body: (UserDefaults) -> Void) {
+    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suite) else {
+        T.expect(false, "kon geen testsuite maken")
+        return
+    }
+    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+    body(defaults)
 }
 
 /// Applies an allowlist and returns the count MenuBarAgent logged for that specific
@@ -18,6 +25,19 @@ func applyAndCount(_ restriction: MenuBarRestriction, _ allowed: Set<String>) ->
     let since = Date()
     restriction.apply(allowing: allowed)
     return MenuBarProbe.lastTrailingItemsCount(since: since)
+}
+
+/// The same reading for a `clear()` instead of an `apply()`, under the same
+/// capture-`since`-first discipline.
+func clearAndCount(_ restriction: MenuBarRestriction) -> Int? {
+    let since = Date()
+    restriction.clear()
+    return MenuBarProbe.lastTrailingItemsCount(since: since)
+}
+
+T.test("shim ziet MenuBarClientCore") {
+    T.expect(STMenuBarShim.isAvailable(),
+             "MenuBarClientCore moet laadbaar zijn op macOS 27")
 }
 
 let allRunning = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
@@ -77,14 +97,10 @@ T.test("clear zet de balk volledig terug") {
     // A narrow allowlist is applied first purely to force a state change, so the
     // `clear()` that follows actually produces a fresh, observable log line.
     _ = applyAndCount(restriction, [])
-    let baselineSince = Date()
-    restriction.clear()
-    let baseline = MenuBarProbe.lastTrailingItemsCount(since: baselineSince)
+    let baseline = clearAndCount(restriction)
 
     _ = applyAndCount(restriction, [])
-    let restoredSince = Date()
-    restriction.clear()
-    let restored = MenuBarProbe.lastTrailingItemsCount(since: restoredSince)
+    let restored = clearAndCount(restriction)
 
     guard let baseline, let restored else {
         T.expect(false, "log gaf geen telling terug")
@@ -142,115 +158,91 @@ T.test("een app die start terwijl je ingeklapt bent verdwijnt niet") {
 }
 
 T.test("verborgen set overleeft opnieuw laden") {
-    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
-    guard let defaults = UserDefaults(suiteName: suite) else {
-        T.expect(false, "kon geen testsuite maken"); return
+    withTestDefaults { defaults in
+        let first = HiddenSet(defaults: defaults)
+        first.hide("com.a")
+        first.hide("com.b")
+        first.show("com.a")
+
+        let second = HiddenSet(defaults: defaults)
+        T.equal(second.bundleIDs, ["com.b"])
+        T.expect(second.isHidden("com.b"), "com.b hoort verborgen te zijn")
+        T.expect(!second.isHidden("com.a"), "com.a is weer getoond")
     }
-    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
-
-    let first = HiddenSet(defaults: defaults)
-    first.hide("com.a")
-    first.hide("com.b")
-    first.show("com.a")
-
-    let second = HiddenSet(defaults: defaults)
-    T.equal(second.bundleIDs, ["com.b"])
-    T.expect(second.isHidden("com.b"), "com.b hoort verborgen te zijn")
-    T.expect(!second.isHidden("com.a"), "com.a is weer getoond")
 }
 
 T.test("inventory ziet draaiende apps") {
-    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
-    guard let defaults = UserDefaults(suiteName: suite) else {
-        T.expect(false, "kon geen testsuite maken"); return
+    withTestDefaults { defaults in
+        let inventory = AppInventory(defaults: defaults)
+        T.expect(inventory.runningBundleIDs.count > 10,
+                 "er draaien er meer dan 10, kreeg \(inventory.runningBundleIDs.count)")
+        T.expect(inventory.runningBundleIDs.contains("com.apple.controlcenter"),
+                 "Control Center draait altijd")
     }
-    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
-
-    let inventory = AppInventory(defaults: defaults)
-    T.expect(inventory.runningBundleIDs.count > 10,
-             "er draaien er meer dan 10, kreeg \(inventory.runningBundleIDs.count)")
-    T.expect(inventory.runningBundleIDs.contains("com.apple.controlcenter"),
-             "Control Center draait altijd")
 }
 
 T.test("inventory onthoudt apps die gestopt zijn") {
-    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
-    guard let defaults = UserDefaults(suiteName: suite) else {
-        T.expect(false, "kon geen testsuite maken"); return
+    withTestDefaults { defaults in
+        defaults.set(["com.verdwenen.app": "Verdwenen App"], forKey: "knownAppNames")
+        let inventory = AppInventory(defaults: defaults)
+
+        let known = inventory.knownApps.first { $0.id == "com.verdwenen.app" }
+        T.expect(known != nil, "een eerder gezien app hoort in de lijst te blijven staan")
+        T.equal(known?.isRunning, false)
+        T.equal(known?.name, "Verdwenen App")
     }
-    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
-
-    defaults.set(["com.verdwenen.app": "Verdwenen App"], forKey: "knownAppNames")
-    let inventory = AppInventory(defaults: defaults)
-
-    let known = inventory.knownApps.first { $0.id == "com.verdwenen.app" }
-    T.expect(known != nil, "een eerder gezien app hoort in de lijst te blijven staan")
-    T.equal(known?.isRunning, false)
-    T.equal(known?.name, "Verdwenen App")
 }
 
 T.test("inventory meldt een wijziging") {
-    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
-    guard let defaults = UserDefaults(suiteName: suite) else {
-        T.expect(false, "kon geen testsuite maken"); return
+    withTestDefaults { defaults in
+        let inventory = AppInventory(defaults: defaults)
+        var called = 0
+        inventory.onChange = { called += 1 }
+        inventory.refresh()
+        T.equal(called, 1, "refresh hoort onChange aan te roepen:")
     }
-    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
-
-    let inventory = AppInventory(defaults: defaults)
-    var called = 0
-    inventory.onChange = { called += 1 }
-    inventory.refresh()
-    T.equal(called, 1, "refresh hoort onChange aan te roepen:")
 }
 
 T.test("inventory reageert op systeemnotificaties") {
-    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
-    guard let defaults = UserDefaults(suiteName: suite) else {
-        T.expect(false, "kon geen testsuite maken"); return
+    withTestDefaults { defaults in
+        let inventory = AppInventory(defaults: defaults)
+        var callCount = 0
+        inventory.onChange = { callCount += 1 }
+        inventory.start()
+
+        // Post didLaunchApplicationNotification manually
+        NSWorkspace.shared.notificationCenter.post(
+            name: NSWorkspace.didLaunchApplicationNotification,
+            object: NSWorkspace.shared
+        )
+        // Spin the run loop to let the notification be delivered on .main
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+
+        T.expect(callCount == 1, "start() moet onChange aanroepen na systeemnotificatie")
+
+        // Now stop and post again
+        inventory.stop()
+        NSWorkspace.shared.notificationCenter.post(
+            name: NSWorkspace.didLaunchApplicationNotification,
+            object: NSWorkspace.shared
+        )
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+
+        T.equal(callCount, 1, "na stop() hoort onChange niet meer aan te roepen:")
     }
-    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
-
-    let inventory = AppInventory(defaults: defaults)
-    var callCount = 0
-    inventory.onChange = { callCount += 1 }
-    inventory.start()
-
-    // Post didLaunchApplicationNotification manually
-    NSWorkspace.shared.notificationCenter.post(
-        name: NSWorkspace.didLaunchApplicationNotification,
-        object: NSWorkspace.shared
-    )
-    // Spin the run loop to let the notification be delivered on .main
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-
-    T.expect(callCount == 1, "start() moet onChange aanroepen na systeemnotificatie")
-
-    // Now stop and post again
-    inventory.stop()
-    NSWorkspace.shared.notificationCenter.post(
-        name: NSWorkspace.didLaunchApplicationNotification,
-        object: NSWorkspace.shared
-    )
-    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-
-    T.equal(callCount, 1, "na stop() hoort onChange niet meer aan te roepen:")
 }
 
 T.test("CollapseDelay rondreist door UserDefaults") {
-    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
-    guard let defaults = UserDefaults(suiteName: suite) else {
-        T.expect(false, "kon geen testsuite maken"); return
+    withTestDefaults { defaults in
+        let prefs = Preferences(defaults: defaults)
+        T.equal(prefs.collapseDelay, .after10, "standaard:")
+
+        prefs.collapseDelay = .never
+        T.equal(Preferences(defaults: defaults).collapseDelay, .never)
+
+        prefs.collapseDelay = .after30
+        T.equal(Preferences(defaults: defaults).collapseDelay, .after30)
     }
-    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
-
-    let prefs = Preferences(defaults: defaults)
-    T.equal(prefs.collapseDelay, .after10, "standaard:")
-
-    prefs.collapseDelay = .never
-    T.equal(Preferences(defaults: defaults).collapseDelay, .never)
-
-    prefs.collapseDelay = .after30
-    T.equal(Preferences(defaults: defaults).collapseDelay, .after30)
 }
 
 T.test("alle vertragingen hebben een Nederlands label") {
