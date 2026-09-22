@@ -2,12 +2,12 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// Dunne laag om het private MenuBarClientCore-framework.
-/// Alles wat met dlopen en NSClassFromString te maken heeft zit hier en nergens anders.
+/// Thin layer around the private MenuBarClientCore framework.
+/// Everything related to dlopen and NSClassFromString lives here and nowhere else.
 @interface STMenuBarShim : NSObject
 
-/// NO wanneer het framework of een van de twee klassen ontbreekt.
-/// Roep dit één keer bij het starten aan en sla het resultaat op.
+/// NO when the framework or either of the two classes is missing.
+/// Call this once at startup and cache the result.
 + (BOOL)isAvailable;
 
 @end

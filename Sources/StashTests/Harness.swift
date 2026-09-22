@@ -1,7 +1,7 @@
 import Foundation
 
-/// Minimale testharness. XCTest en swift-testing zijn niet beschikbaar zonder Xcode,
-/// dus tests draaien als gewoon programma: `swift run StashTests`.
+/// Minimal test harness. XCTest and swift-testing are unavailable without Xcode,
+/// so tests run as a plain executable: `swift run StashTests`.
 enum T {
     nonisolated(unsafe) private static var failures: [String] = []
     nonisolated(unsafe) private static var passed = 0
