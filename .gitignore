@@ -4,3 +4,6 @@
 Stash.app/
 DerivedData/
 .DS_Store
+
+# Agent-werkmap: bevat rapporten en volledige schermafbeeldingen — nooit publiceren
+.superpowers/
