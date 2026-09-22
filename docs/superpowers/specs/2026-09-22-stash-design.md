@@ -94,10 +94,23 @@ Vastgesteld, tegen de verwachting op basis van vergelijkbare projecten in:
 |---|---|
 | Entitlement nodig? | Nee |
 | Code signing nodig? | Nee — ad-hoc gecompileerde CLI werkte |
-| App in `/Applications`? | Nee — draaide vanuit de scratchpad |
+| App in `/Applications`? | Per rol verschillend — zie hieronder |
 | Screen Recording / Accessibility? | Nee, geen enkele prompt |
 | Schoon herstel? | Ja, `invalidate()` én procesexit zetten alles exact terug |
 | Bereik systeemitems | Boven 63. Met range 0–63 verdween Screen Mirroring ongewild; met 0–255 blijft alles staan |
+
+De rij "App in `/Applications`?" heeft twee antwoorden, niet één, en dat verschil is pas op
+22-09-2026 (Task 5, fix round 1) empirisch vastgesteld — niet in de oorspronkelijke probe:
+
+- **Het proces dat de assertion vasthoudt:** nee. Dat is precies wat hierboven gemeten is, met
+  een ad-hoc gecompileerde CLI vanuit de scratchpad, en dat blijft waar.
+- **Een app wiens eigen status item zichtbaar moet blijven onder die assertion:** ja — dat moet
+  de kopie zijn die LaunchServices voor dat bundle id resolvet, en dat is in de praktijk de
+  kopie in `/Applications`. Vanuit `.build/debug` of `/tmp` bestaat het status item wel, meldt
+  zich zelfs geldig aan bij MenuBarAgent, maar wordt nooit getekend. Zeven verschillende
+  pogingen (bundelen, ad-hoc signeren, vertraagde `apply()`, `autosaveName`, clear/re-apply)
+  veranderden daar niets aan; alleen installeren in `/Applications` deed het. Bewijs:
+  `.superpowers/sdd/2026-09-22-stash/finding-a-*.png`, gemeten 22-09-2026 op macOS 27.0.
 
 `MBAssessmentModeConfiguration` accepteert alleen `NSArray`; een `NSSet` gooit een exception.
 
@@ -114,6 +127,12 @@ Vastgesteld, tegen de verwachting op basis van vergelijkbare projecten in:
 - **Geen herordenen.** De allowlist bepaalt of iets getekend wordt, niet waar.
 - **Geen tweede balk of paneel** met de verborgen iconen erin. Die techniek (vensters opsommen,
   screenshotten, clicks doorsturen) bestaat niet meer op macOS 27.
+- **Eigen chevron alleen zichtbaar vanuit `/Applications`.** Stash houdt zijn eigen status item
+  enkel in beeld als het draait als de kopie die LaunchServices voor `be.vernast.Stash`
+  resolvet — in de praktijk de installatie in `/Applications`. Start je de debug-build
+  rechtstreeks vanuit `.build` (of elders), dan bestaat de chevron, reageert hij op klikken,
+  maar tekent het systeem hem nooit: de rest van de app werkt gewoon, alleen het eigen icoon
+  blijft onzichtbaar. Zie §2 voor het bewijs.
 
 **Niet in v1, bewust:**
 - Fallback op de spacer-truc. Die is op 27 half kapot (ejectie boven halve schermbreedte, groeien

@@ -37,11 +37,26 @@ public enum MenuBarProbe {
     /// Polls for a trailingItems.count line logged at or after `since`, so a reading is
     /// provably caused by whatever ran at or after that moment — not a stale count that
     /// happened to still sit inside some fixed lookback window. Polls up to 50 times, 100 ms
-    /// apart (5 s total budget); returns nil only once that budget is exhausted.
+    /// apart between attempts — **not** a 5 s wall-clock budget: `/usr/bin/log show` itself
+    /// can cost well over a second per call once the unified log has enough volume behind
+    /// `--start` to scan (measured 1.3 s+ per call in a log-heavy session on 2026-09-22), so
+    /// the real budget is closer to four attempts than fifty in that case. Returns nil only
+    /// once all attempts are exhausted.
     /// `--info --debug` is required: without those flags `log show` omits these lines entirely.
     public static func lastTrailingItemsCount(since: Date) -> Int? {
+        // Floor to whole milliseconds — the same precision `log show`'s compact style
+        // prints and `lineTimestampFormatter` re-parses. Comparing a sub-millisecond
+        // `Date()` against a millisecond-truncated log timestamp let a genuinely later
+        // line lose the `timestamp >= since` check by a fraction of a millisecond after
+        // truncation, and because the same (correctly logged, but now-mislabelled-as-stale)
+        // line is the only candidate on every retry, no amount of polling could recover
+        // from it (measured: a real line 1.6 ms "before" a since a fraction later, rejected
+        // on all 50 attempts). Flooring `since` down can only ever admit a line that is
+        // truly at most one millisecond early; it can never let through one that is
+        // genuinely stale, so this loses no precision that mattered.
+        let flooredSince = Date(timeIntervalSince1970: (since.timeIntervalSince1970 * 1000).rounded(.down) / 1000)
         for _ in 0..<50 {
-            if let count = queryOnce(since: since) {
+            if let count = queryOnce(since: flooredSince) {
                 return count
             }
             Thread.sleep(forTimeInterval: 0.1)
