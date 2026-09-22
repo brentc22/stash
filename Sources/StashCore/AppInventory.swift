@@ -12,7 +12,10 @@ public struct KnownApp: Identifiable, Hashable {
 /// after we have passed that list to the menu bar, and it is not in the list, so it silently
 /// vanishes from the menu bar. The app looks like it randomly eats programs. Every launch
 /// must therefore trigger a recomputation.
-public final class AppInventory {
+/// - Note: Marked `@unchecked Sendable` because all mutations occur on the main thread:
+///   observers deliver on `.main`, and the app accesses this class only from the main thread
+///   (status item, app delegate, settings view).
+public final class AppInventory: @unchecked Sendable {
 
     private static let namesKey = "knownAppNames"
 

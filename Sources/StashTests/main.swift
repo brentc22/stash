@@ -203,4 +203,37 @@ T.test("inventory meldt een wijziging") {
     T.equal(called, 1, "refresh hoort onChange aan te roepen:")
 }
 
+T.test("inventory reageert op systeemnotificaties") {
+    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suite) else {
+        T.expect(false, "kon geen testsuite maken"); return
+    }
+    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+    let inventory = AppInventory(defaults: defaults)
+    var callCount = 0
+    inventory.onChange = { callCount += 1 }
+    inventory.start()
+
+    // Post didLaunchApplicationNotification manually
+    NSWorkspace.shared.notificationCenter.post(
+        name: NSWorkspace.didLaunchApplicationNotification,
+        object: NSWorkspace.shared
+    )
+    // Spin the run loop to let the notification be delivered on .main
+    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+
+    T.expect(callCount == 1, "start() moet onChange aanroepen na systeemnotificatie")
+
+    // Now stop and post again
+    inventory.stop()
+    NSWorkspace.shared.notificationCenter.post(
+        name: NSWorkspace.didLaunchApplicationNotification,
+        object: NSWorkspace.shared
+    )
+    RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+
+    T.equal(callCount, 1, "na stop() hoort onChange niet meer aan te roepen:")
+}
+
 T.finish()
