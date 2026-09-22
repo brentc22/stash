@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Een gewoon NSWindow om de SwiftUI-view heen. De app is een accessory zonder
-/// SwiftUI-App-levenscyclus, dus het venster wordt met de hand gemaakt.
+/// A plain `NSWindow` wrapping the SwiftUI view. Built by hand because the app is an
+/// accessory app with no SwiftUI `App` lifecycle of its own.
 // @MainActor: this only ever creates and drives AppKit objects (NSWindow, NSHostingView)
 // from main-thread callbacks (the status item's right-click menu). No `deinit`, so — same
 // reasoning as `SettingsModel` above and `AppDelegate`/`StatusItemController` (Task 5) —
