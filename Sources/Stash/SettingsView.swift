@@ -144,6 +144,25 @@ struct SettingsView: View {
 
     @ObservedObject var model: SettingsModel
 
+    var body: some View {
+        TabView {
+            AppsTab(model: model)
+                .tabItem { Text("Apps") }
+            GeneralTab(model: model)
+                .tabItem { Text("Algemeen") }
+        }
+        .frame(width: 460, height: 640)
+    }
+}
+
+/// The per-app list and the filters that only narrow what it shows. Everything that is
+/// not per-app now lives on `GeneralTab` — before this split the list was wedged between
+/// four lines of explanation and a block of global checkboxes, and got the least room of
+/// the three.
+struct AppsTab: View {
+
+    @ObservedObject var model: SettingsModel
+
     /// Filters the app list for display only — never touches the hidden set. An app
     /// filtered out of view stays hidden or visible exactly as it was; the search field
     /// only changes what's on screen. Ownership filters first, then the search query
@@ -156,35 +175,17 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
             searchField
             Divider()
             list
-            Divider()
-            footer
         }
-        .frame(width: 420, height: 520)
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Verbergen").font(.headline)
-            Text("Kies per app: Zichtbaar blijft altijd in de balk, Verbergen gaat weg "
-                 + "achter het pijltje maar komt terug bij uitklappen, en Altijd verbergen "
-                 + "komt in geen enkele stand meer terug. Een app met meerdere iconen gaat "
-                 + "als geheel weg — dat is een beperking van macOS, niet van Stash.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(16)
     }
 
     private var searchField: some View {
         TextField("Zoeken", text: $model.query)
             .textFieldStyle(.roundedBorder)
             .padding(.horizontal, 16)
-            .padding(.bottom, 12)
+            .padding(.vertical, 12)
     }
 
     private var list: some View {
@@ -224,10 +225,40 @@ struct SettingsView: View {
             }
         }
     }
+}
 
-    private var footer: some View {
-        VStack(spacing: 12) {
-            HStack {
+/// Everything that is not per-app: collapse behaviour, login item, the global hotkey and
+/// the optional Accessibility-backed filter whose *effect* you see on the Apps tab.
+struct GeneralTab: View {
+
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            hotKeySection
+            Divider()
+            behaviourSection
+            Divider()
+            accessibilitySection
+            Spacer(minLength: 0)
+            Divider()
+            footer
+        }
+        .padding(18)
+    }
+
+    private var hotKeySection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("SNELTOETS")
+            Toggle("Sneltoets ⌃⌥S gebruiken", isOn: $model.useGlobalHotKey)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var behaviourSection: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            sectionHeader("GEDRAG")
+            HStack(spacing: 10) {
                 Text("Automatisch inklappen")
                 Spacer()
                 Picker("", selection: $model.collapseDelay) {
@@ -236,25 +267,50 @@ struct SettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .frame(width: 180)
+                .frame(width: 160)
             }
             Toggle("Starten bij inloggen", isOn: $model.launchAtLogin)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Toggle("Sneltoets ⌃⌥S gebruiken", isOn: $model.useGlobalHotKey)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            VStack(alignment: .leading, spacing: 4) {
-                Toggle("Toon alleen apps met een menubalk-icoon", isOn: $model.showOnlyMenuBarApps)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if !MenuBarOwners.isTrusted {
-                    Text("Hiervoor vraagt macOS toestemming voor Toegankelijkheid. Stash "
-                         + "werkt ook zonder die toestemming — dit vinkje filtert dan "
-                         + "gewoon niet.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
         }
-        .padding(16)
+    }
+
+    private var accessibilitySection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("TOEGANKELIJKHEID")
+            Toggle("Alleen apps met een menubalk-icoon tonen", isOn: $model.showOnlyMenuBarApps)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Hiervoor vraagt macOS eenmalig Toegankelijkheid. Stash gebruikt dat "
+                 + "alleen om te zien wélke apps een icoon hebben — verbergen en tonen "
+                 + "werkt ook zonder. Geef je geen toestemming, dan blijft de volledige "
+                 + "lijst staan.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var footer: some View {
+        HStack {
+            Text("Stash \(Self.version)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Link("Broncode op GitHub", destination: URL(string: "https://github.com/brentc22/stash")!)
+                .font(.caption)
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 11, weight: .bold))
+            .kerning(0.4)
+            .foregroundStyle(.secondary)
+    }
+
+    /// Read from the bundle rather than hardcoded, so the footer can never drift from the
+    /// version that was actually shipped. `swift run` has no bundle version — fall back to
+    /// a dash instead of printing a number that would be a guess.
+    static var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
     }
 }
