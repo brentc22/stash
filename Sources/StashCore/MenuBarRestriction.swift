@@ -6,21 +6,7 @@ public enum MenuBarRestrictionError: Error {
     case activationFailed(String)
 }
 
-public protocol MenuBarRestricting: AnyObject {
-    var isAvailable: Bool { get }
-    /// Replaces the current restriction. Idempotent. The new token becomes active
-    /// synchronously; the old one is only invalidated once `completion` confirms
-    /// activation actually succeeded, and is restored if it failed.
-    func apply(allowing bundleIDs: Set<String>, completion: ((Error?) -> Void)?)
-    /// Lifts every restriction; the bar is fully redrawn.
-    func clear()
-}
-
-public extension MenuBarRestricting {
-    func apply(allowing bundleIDs: Set<String>) { apply(allowing: bundleIDs, completion: nil) }
-}
-
-public final class MenuBarRestriction: MenuBarRestricting, @unchecked Sendable {
+public final class MenuBarRestriction: @unchecked Sendable {
 
     private var token: AnyObject?
     private let lock = NSLock()
@@ -29,6 +15,9 @@ public final class MenuBarRestriction: MenuBarRestricting, @unchecked Sendable {
 
     public var isAvailable: Bool { STMenuBarShim.isAvailable() }
 
+    /// Replaces the current restriction. Idempotent. The new token becomes active
+    /// synchronously; the old one is only invalidated once `completion` confirms
+    /// activation actually succeeded, and is restored if it failed.
     public func apply(allowing bundleIDs: Set<String>, completion: ((Error?) -> Void)? = nil) {
         guard isAvailable else {
             completion?(MenuBarRestrictionError.unavailable)
@@ -82,6 +71,7 @@ public final class MenuBarRestriction: MenuBarRestricting, @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Lifts every restriction; the bar is fully redrawn.
     public func clear() {
         lock.lock()
         let old = token

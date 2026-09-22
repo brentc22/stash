@@ -3,7 +3,7 @@ import AppKit
 public struct KnownApp: Identifiable, Hashable {
     public let id: String       // bundle identifier
     public let name: String
-    public var isRunning: Bool
+    public let isRunning: Bool
 }
 
 /// Tracks which apps are running and which ones we have ever seen.
