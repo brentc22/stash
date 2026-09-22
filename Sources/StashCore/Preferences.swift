@@ -1,4 +1,5 @@
 import Foundation
+import ServiceManagement
 
 public enum CollapseDelay: Int, CaseIterable, Sendable {
     case never = 0
@@ -32,5 +33,27 @@ public final class Preferences {
             return CollapseDelay(rawValue: defaults.integer(forKey: Self.collapseDelayKey)) ?? .after10
         }
         set { defaults.set(newValue.rawValue, forKey: Self.collapseDelayKey) }
+    }
+}
+
+extension Preferences {
+    /// Reads the real status from the system rather than a flag of our own — those two
+    /// drift apart the moment the user changes it in System Settings instead of here.
+    ///
+    /// `SMAppService` only works from a bundled, signed app. From `swift run` it throws;
+    /// that is expected and gets logged, not crashed on.
+    public var launchAtLogin: Bool {
+        get { SMAppService.mainApp.status == .enabled }
+        set {
+            do {
+                if newValue {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                NSLog("Stash: kon login item niet wijzigen: \(error)")
+            }
+        }
     }
 }

@@ -20,6 +20,9 @@ final class SettingsModel: ObservableObject {
             preferences.collapseDelay = collapseDelay
         }
     }
+    @Published var launchAtLogin: Bool {
+        didSet { preferences.launchAtLogin = launchAtLogin }
+    }
 
     private let inventory: AppInventory
     private let hidden: HiddenSet
@@ -35,6 +38,7 @@ final class SettingsModel: ObservableObject {
         self.preferences = preferences
         self.onChange = onChange
         self.collapseDelay = preferences.collapseDelay
+        self.launchAtLogin = preferences.launchAtLogin
         refresh()
     }
 
@@ -105,16 +109,20 @@ struct SettingsView: View {
     }
 
     private var footer: some View {
-        HStack {
-            Text("Automatisch inklappen")
-            Spacer()
-            Picker("", selection: $model.collapseDelay) {
-                ForEach(CollapseDelay.allCases, id: \.rawValue) { delay in
-                    Text(delay.label).tag(delay)
+        VStack(spacing: 12) {
+            HStack {
+                Text("Automatisch inklappen")
+                Spacer()
+                Picker("", selection: $model.collapseDelay) {
+                    ForEach(CollapseDelay.allCases, id: \.rawValue) { delay in
+                        Text(delay.label).tag(delay)
+                    }
                 }
+                .labelsHidden()
+                .frame(width: 180)
             }
-            .labelsHidden()
-            .frame(width: 180)
+            Toggle("Starten bij inloggen", isOn: $model.launchAtLogin)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
     }
