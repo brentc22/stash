@@ -47,6 +47,9 @@ for the full reasoning, the probe output it is based on, and the pitfalls (an `N
 API demands an `NSArray` throws; an `allowedSystemItems` range of `0...63` silently kills Screen
 Mirroring).
 
+The task-by-task implementation plan lives in
+[`docs/superpowers/plans/2026-09-22-stash.md`](docs/superpowers/plans/2026-09-22-stash.md).
+
 ## Planned architecture
 
 | Layer | Responsibility |
