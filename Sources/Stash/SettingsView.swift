@@ -21,13 +21,27 @@ final class SettingsModel: ObservableObject {
         }
     }
     @Published var launchAtLogin: Bool {
-        didSet { preferences.launchAtLogin = launchAtLogin }
+        didSet {
+            guard !isReconcilingLaunchAtLogin else { return }
+            preferences.launchAtLogin = launchAtLogin
+            // `Preferences.launchAtLogin`'s setter swallows a failing
+            // `SMAppService.register()`/`unregister()` and just logs it — the checkbox
+            // must not keep showing a value the system never actually adopted. Read
+            // the real state back and, if it disagrees, correct the published value.
+            let actual = preferences.launchAtLogin
+            if actual != launchAtLogin {
+                isReconcilingLaunchAtLogin = true
+                launchAtLogin = actual
+                isReconcilingLaunchAtLogin = false
+            }
+        }
     }
 
     private let inventory: AppInventory
     private let hidden: HiddenSet
     private let preferences: Preferences
     private let onChange: () -> Void
+    private var isReconcilingLaunchAtLogin = false
 
     init(inventory: AppInventory,
          hidden: HiddenSet,
@@ -47,6 +61,8 @@ final class SettingsModel: ObservableObject {
     func refresh() {
         apps = inventory.knownApps.filter { $0.id != ownBundleID }
         hiddenIDs = hidden.bundleIDs
+        collapseDelay = preferences.collapseDelay
+        launchAtLogin = preferences.launchAtLogin
     }
 
     func setHidden(_ isHidden: Bool, for bundleID: String) {

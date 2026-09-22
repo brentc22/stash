@@ -25,6 +25,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var state: BarState = .collapsed
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Single-instance guard: `make install` replaces the bundle on disk, but a
+        // running instance keeps holding its assertion until it quits on its own. If
+        // another process with our bundle identifier is already running, this is that
+        // second copy — exit immediately instead of fighting over the status item and
+        // the assessment-mode assertion.
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let alreadyRunning = NSRunningApplication
+            .runningApplications(withBundleIdentifier: ownBundleID)
+            .contains { $0.processIdentifier != ownPID }
+        if alreadyRunning {
+            NSApp.terminate(nil)
+            return
+        }
+
         statusItem = StatusItemController(
             onToggle: { [weak self] in self?.toggle() },
             onSettings: { [weak self] in self?.showSettings() },

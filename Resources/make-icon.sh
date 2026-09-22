@@ -8,10 +8,11 @@
 # with no visible mark at all — just a plain rounded square. Drawing the chevron's
 # three line segments by hand sidesteps that and is easier to verify by eye anyway.
 set -e
-DIR=$(mktemp -d)/Stash.iconset
+TMP=$(mktemp -d)
+DIR="$TMP/Stash.iconset"
 mkdir -p "$DIR"
 
-cat > /tmp/stash_icon.swift <<'SWIFT'
+cat > "$TMP/stash_icon.swift" <<'SWIFT'
 import AppKit
 
 let sizes = [16, 32, 64, 128, 256, 512, 1024]
@@ -50,7 +51,7 @@ for size in sizes {
 }
 SWIFT
 
-swift /tmp/stash_icon.swift "$DIR"
+swift "$TMP/stash_icon.swift" "$DIR"
 
 # iconutil only accepts the ten standard iconset filenames. The loop above also
 # writes icon_64x64.png and icon_1024x1024.png, which aren't among them — they
@@ -67,4 +68,4 @@ done
 rm -f "$DIR/icon_64x64.png" "$DIR/icon_1024x1024.png"
 
 iconutil -c icns "$DIR" -o "$(dirname "$0")/Stash.icns"
-echo "geschreven: $(dirname "$0")/Stash.icns"
+echo "written: $(dirname "$0")/Stash.icns"

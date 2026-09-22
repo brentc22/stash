@@ -141,8 +141,11 @@ swift build             # debug build
 swift run StashTests    # run the test suite (exit 0 = green)
 make build              # release build
 make bundle             # release build + Stash.app, ad-hoc signed
-make install            # bundle + copy to /Applications
+make install            # bundle + stop a running instance + copy to /Applications
+make run                # make install, then open the /Applications copy
+make test               # swift run StashTests
 make clean              # remove .build and Stash.app
+Resources/make-icon.sh  # regenerate Resources/Stash.icns
 ```
 
 Two things about the plain `swift build` / `swift run` binary: it has no app bundle, so
@@ -164,6 +167,18 @@ delay, and a "Starten bij inloggen" (start at login) toggle backed by `SMAppServ
 <p>
   <img src="docs/images/settings-window.png" alt="Stash's settings window, listing known apps with checkboxes plus auto-collapse and login-item controls" width="420">
 </p>
+
+## Uninstall
+
+- **Turn off "Starten bij inloggen" in Settings before quitting**, if it was on. That
+  unregisters the `SMAppService` login item cleanly; quitting first without doing this
+  leaves the login item registered, so macOS keeps launching Stash at login even after
+  the app itself is gone.
+- **Quit Stash** — right-click the chevron and choose "Stash stoppen". This lifts the
+  assessment-mode assertion and hands every hidden icon back before the app disappears.
+- **Remove the app**: `rm -rf /Applications/Stash.app`.
+- **Remove its saved settings**: `rm -f ~/Library/Preferences/com.brentc22.Stash.plist`.
+  This is the hidden-apps list and the auto-collapse delay; only needed for a full clean.
 
 ## License
 

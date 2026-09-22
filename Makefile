@@ -22,12 +22,14 @@ sign:
 	codesign --verify --verbose $(BUNDLE)
 
 install: bundle
+	@pkill -x $(APP) 2>/dev/null || true
+	@for i in 1 2 3 4 5 6 7 8 9 10; do pgrep -x $(APP) >/dev/null || break; sleep 0.2; done
 	rm -rf /Applications/$(BUNDLE)
 	cp -R $(BUNDLE) /Applications/
-	@echo "geinstalleerd in /Applications/$(BUNDLE)"
+	@echo "installed in /Applications/$(BUNDLE)"
 
-run: bundle
-	open $(BUNDLE)
+run: install
+	open /Applications/$(BUNDLE)
 
 test:
 	swift run StashTests

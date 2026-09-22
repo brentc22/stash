@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Stash",
-    platforms: [.macOS("26.0")],
+    platforms: [.macOS("27.0")],
     targets: [
         .target(name: "MenuBarShim"),
         .target(name: "StashCore", dependencies: ["MenuBarShim"]),
