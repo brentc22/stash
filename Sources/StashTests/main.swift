@@ -93,7 +93,7 @@ T.test("clear zet de balk volledig terug") {
     T.equal(restored, baseline, "na clear:")
 }
 
-let ownID = "be.vernast.Stash"
+let ownID = "com.brentc22.Stash"
 
 T.test("uitgeklapt staat alles toe") {
     let result = Allowlist.compute(
@@ -142,7 +142,7 @@ T.test("een app die start terwijl je ingeklapt bent verdwijnt niet") {
 }
 
 T.test("verborgen set overleeft opnieuw laden") {
-    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suite) else {
         T.expect(false, "kon geen testsuite maken"); return
     }
@@ -160,7 +160,7 @@ T.test("verborgen set overleeft opnieuw laden") {
 }
 
 T.test("inventory ziet draaiende apps") {
-    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suite) else {
         T.expect(false, "kon geen testsuite maken"); return
     }
@@ -174,7 +174,7 @@ T.test("inventory ziet draaiende apps") {
 }
 
 T.test("inventory onthoudt apps die gestopt zijn") {
-    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suite) else {
         T.expect(false, "kon geen testsuite maken"); return
     }
@@ -190,7 +190,7 @@ T.test("inventory onthoudt apps die gestopt zijn") {
 }
 
 T.test("inventory meldt een wijziging") {
-    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suite) else {
         T.expect(false, "kon geen testsuite maken"); return
     }
@@ -204,7 +204,7 @@ T.test("inventory meldt een wijziging") {
 }
 
 T.test("inventory reageert op systeemnotificaties") {
-    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suite) else {
         T.expect(false, "kon geen testsuite maken"); return
     }
@@ -237,7 +237,7 @@ T.test("inventory reageert op systeemnotificaties") {
 }
 
 T.test("CollapseDelay rondreist door UserDefaults") {
-    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    let suite = "com.brentc22.Stash.tests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suite) else {
         T.expect(false, "kon geen testsuite maken"); return
     }

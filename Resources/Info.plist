@@ -5,7 +5,7 @@
     <key>CFBundleExecutable</key>
     <string>Stash</string>
     <key>CFBundleIdentifier</key>
-    <string>be.vernast.Stash</string>
+    <string>com.brentc22.Stash</string>
     <key>CFBundleName</key>
     <string>Stash</string>
     <key>CFBundlePackageType</key>

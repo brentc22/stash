@@ -1,7 +1,7 @@
 import AppKit
 import StashCore
 
-let ownBundleID = "be.vernast.Stash"
+let ownBundleID = "com.brentc22.Stash"
 
 // @MainActor: every method here either touches AppKit directly (`NSApp.terminate`,
 // `StatusItemController`) or is only ever called from a main-thread callback

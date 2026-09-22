@@ -128,7 +128,7 @@ De rij "App in `/Applications`?" heeft twee antwoorden, niet één, en dat versc
 - **Geen tweede balk of paneel** met de verborgen iconen erin. Die techniek (vensters opsommen,
   screenshotten, clicks doorsturen) bestaat niet meer op macOS 27.
 - **Eigen chevron alleen zichtbaar vanuit `/Applications`.** Stash houdt zijn eigen status item
-  enkel in beeld als het draait als de kopie die LaunchServices voor `be.vernast.Stash`
+  enkel in beeld als het draait als de kopie die LaunchServices voor `com.brentc22.Stash`
   resolvet — in de praktijk de installatie in `/Applications`. Start je de debug-build
   rechtstreeks vanuit `.build` (of elders), dan bestaat de chevron, reageert hij op klikken,
   maar tekent het systeem hem nooit: de rest van de app werkt gewoon, alleen het eigen icoon

@@ -1,61 +1,91 @@
 # Stash
 
 Stash hides macOS menu bar icons behind a single chevron, so a crowded bar collapses to
-one click. It targets macOS 27, where every menu bar icon-hiding app on the market
-(Ice, Bartender, Hidden Bar, Dozer) stopped working.
+one click. It targets **macOS 27**, the release that broke this whole category of app. Ice is the
+one measured here — it is what I ran until it stopped working, and the log evidence below
+is Ice's. Bartender, Hidden Bar and Dozer were not tested, but they are built on the same
+removed mechanism, so expect the same outcome.
 
 <p>
-  <img src="docs/images/stash-demo.gif" alt="A crowded macOS menu bar collapsing behind Stash's chevron and reappearing" width="590">
+  <img src="docs/images/menubar-collapsed.png" alt="Menu bar with Stash's chevron collapsed, hiding several status items" width="420">
 </p>
 
-*Click the chevron and the icons you don't need disappear; click again and they're back.*
+*Collapsed: only the chevron and a handful of apps are visible. Click it and the rest
+reappear; click again and they're gone.*
 
-## Why this exists
+## Why the existing tools stopped working
 
-Until macOS 26, the system drew every menu bar item as its own tiny window. That was
-never a published API, but it was stable enough to build on, and an entire category of
-app did: Ice, Bartender, Hidden Bar and Dozer all worked by enumerating those windows,
-screenshotting them, and moving them off-screen or back.
+Until macOS 26, the system drew every status item as its own window. That was never a
+public API, but it gave the whole category something to hold on to: you could enumerate
+those windows through `CGWindowList`, capture them with ScreenCaptureKit, and push them
+off screen.
 
-macOS 27 draws the whole menu bar as a **single window**. There is nothing left to
-enumerate. Two things broke as a direct result:
+macOS 27 draws the menu bar as **one window**. There is nothing left to enumerate. Two
+further changes make the classic workarounds fail outright:
 
-- The classic fallback — inflate a spacer item until everything to its left falls off
-  the edge of the screen — no longer works either. A status item whose backing window
-  crosses half the screen's width gets **dropped from the layout**, not clamped, so the
-  trick that used to hide icons stops taking effect at exactly the wrong width.
-- The new menu bar engine maintains its own idea of which status items are *supported*,
-  and silently drops the rest. On the machine this was built on, the system's own
-  `MenuBarAgent` process logs lines like:
+- An `NSStatusItem` whose backing window reaches **half the screen width** is *dropped*
+  from the layout instead of being clamped. The old trick — inflate a spacer item until
+  everything to its left falls off screen — no longer pushes anything anywhere. Measured
+  by others on a 1728pt display: 848pt hides, 849pt does not (848 + 16pt of chrome = 864
+  = 1728/2). That figure is not mine; the single-window rewrite and the log line below are.
+- The new engine has a notion of *supported* status items and refuses the rest. Straight
+  out of `MenuBarAgent` on the machine this was built on:
 
   ```
   [com.apple.menubar:statusItems] Filtering out unsupported status item: com.jordanbaird.Ice
   ```
 
-  repeated dozens of times a minute — Ice's own spacer items were being actively
-  filtered out of the bar it was trying to control.
+  34 times in a single minute. The spacer items are actively filtered out of the bar
+  they are trying to control.
 
-None of this is a bug in Ice, Bartender or any of the others. It's a rewrite that
-removed the implementation detail their entire category depended on, and there is no
-public replacement for what they used to do.
+None of this is a bug in Ice, Bartender or any of the others. It's a rewrite that removed
+the implementation detail their entire category depended on, and there is no public
+replacement for what they used to do.
+
+macOS 27 does ship its own overflow chevron (`•••`), but it decides for itself what
+collapses. There is no supported way to choose per app what gets hidden.
 
 ## How Stash works instead
 
-macOS 27 does still contain a facility for hiding menu bar items: the one behind
-**assessment mode**, the exam mode schools use to strip a Mac's menu bar down during a
-test. It works as an allowlist — you hold an assertion listing which apps are allowed to
-draw a status item, and the system simply doesn't draw anything else.
+macOS 27 still contains the facility behind **assessment mode** — the exam mode schools
+use to strip a Mac's menu bar bare during a test. It behaves as an **allowlist**: you
+hold an assertion listing which apps may draw a status item, and the system simply does
+not draw the rest.
 
-That facility lives in a private framework, `MenuBarClientCore`, behind two
-undocumented classes: `MBAssessmentModeConfiguration` and `MBAssessmentModeAssertion`.
-Stash `dlopen`s the framework, builds a configuration listing the running apps that
-should stay visible, and activates an assertion with it. Toggling the chevron replaces
-that assertion with a new one; quitting Stash invalidates it, which hands every icon
-straight back.
+That facility lives in a private framework, `MenuBarClientCore`, behind two undocumented
+classes: `MBAssessmentModeConfiguration` and `MBAssessmentModeAssertion`. Stash `dlopen`s
+the framework, builds a configuration listing the apps that should stay visible, and
+activates an assertion with it. Collapsing and expanding is nothing more than replacing
+that assertion with one carrying a different allowlist. Quitting Stash invalidates it,
+which hands every icon straight back.
 
-This is a private API, not a stable contract. If Apple changes or removes it, Stash's
-own chevron shows a warning triangle instead of a working toggle, and no apps get
-hidden — it does not crash, and it doesn't touch anything else on the system.
+This is a private API, not a stable contract. If Apple changes or removes it,
+`STMenuBarShim.isAvailable` returns false: the chevron renders as a warning triangle, the
+toggle does nothing, and no apps get hidden. It does not crash, and it does not touch
+anything else on the system.
+
+Read [`docs/superpowers/specs/2026-09-22-stash-design.md`](docs/superpowers/specs/2026-09-22-stash-design.md)
+for the full reasoning, the probe output it is based on, and the pitfalls (an `NSSet`
+where the API demands an `NSArray` throws; an `allowedSystemItems` range of `0...63`
+silently kills Screen Mirroring). The task-by-task implementation plan lives in
+[`docs/superpowers/plans/2026-09-22-stash.md`](docs/superpowers/plans/2026-09-22-stash.md).
+Both documents are written in Dutch.
+
+## Architecture
+
+| Layer | Responsibility |
+|---|---|
+| `MenuBarShim` (Objective-C) | wraps the private `MenuBarClientCore` framework via `dlopen` + runtime lookup |
+| `StashCore` (Swift) | pure logic: app inventory − hidden set → allowlist; persistence; assertion lifecycle |
+| `Stash` (AppKit + SwiftUI) | chevron status item, settings window, accessory app |
+
+Swift 6.4, SwiftPM, no Xcode project.
+
+<p>
+  <img src="docs/images/menubar-expanded.png" alt="The same menu bar expanded, with the previously hidden status items visible again" width="420">
+</p>
+
+*Expanded: the chevron flips and everything comes back.*
 
 ## Limitations
 
@@ -70,22 +100,15 @@ These are limits of the underlying facility, not choices Stash made:
 - **The UI is in Dutch.** ("Verbergen" = Hide, "Automatisch inklappen" = Auto-collapse,
   "Starten bij inloggen" = Start at login.) It isn't localized yet; the labels are short
   enough to follow from the screenshots.
+- **Private framework.** Any macOS update can break Stash, and an app built on this can
+  never ship on the Mac App Store. That is a deliberate trade-off: the supported
+  alternative is having no control over the menu bar at all.
 
 ## Install
 
-### Homebrew (recommended)
-
 ```
-brew install --cask --no-quarantine brentc22/stash/stash
-```
-
-`--no-quarantine` is required: Stash is not notarised by Apple, so without it macOS
-refuses to open the app on first launch. If you left it out, clear the flag once with
-`xattr -dr com.apple.quarantine /Applications/Stash.app`.
-
-### From a release build
-
-```
+git clone https://github.com/brentc22/stash.git
+cd stash
 make install
 open /Applications/Stash.app
 ```
@@ -93,52 +116,50 @@ open /Applications/Stash.app
 `make install` builds a release binary, bundles it, ad-hoc code-signs it, and copies it
 to `/Applications`.
 
-**The `/Applications` location is a real requirement, not a suggestion.** Stash keeps
-its own chevron visible only when it runs as the copy of `com.brentc22.Stash` that
-LaunchServices resolves — in practice, the one in `/Applications`. Run the binary
-straight out of `.build/` (or anywhere else) and everything else still works — the
-chevron reacts to clicks, hiding and restoring other apps' icons — but the system never
-draws Stash's own icon.
-
-### From source
-
-```
-git clone https://github.com/brentc22/stash.git
-cd stash
-make install
-```
+**The `/Applications` location is a real requirement, not a suggestion.** Stash keeps its
+own chevron visible only when it runs as the copy of `com.brentc22.Stash` that
+LaunchServices resolves for that bundle identifier — in practice, the one in
+`/Applications`. Run the binary from anywhere else and everything else still works — the
+chevron reacts to clicks, other apps' icons hide and come back — but the system never
+draws Stash's own icon, so there is nothing left to click.
 
 ## Requirements
 
-- macOS 27, Apple Silicon.
+- macOS 27.
 - Xcode Command Line Tools with Swift 6.4. Xcode itself is not required and not used.
-- **`swift test` does not work here.** Both XCTest and swift-testing fail at link time
-  on a Command-Line-Tools-only setup — they need pieces that only ship inside Xcode. The
-  test suite is instead a plain executable target, run with `swift run StashTests`;
-  exit code 0 means every test passed. This is worth knowing before you go looking for
-  why `swift test` won't even build.
+- **`swift test` does not work here — use `swift run StashTests`.** Running `swift test`
+  prints `error: no tests found; create a target in the 'Tests' directory`, because there
+  deliberately is no such target. On a Command-Line-Tools-only machine both XCTest and
+  swift-testing fail to build or link: they need pieces that ship only inside Xcode. So
+  the suite is a plain executable target instead, and exit code 0 means every test
+  passed.
 
 ## Building and testing
 
 ```
-swift build            # debug build
-swift run StashTests   # run the test suite (exit 0 = green)
+swift build             # debug build
+swift run StashTests    # run the test suite (exit 0 = green)
 make build              # release build
 make bundle             # release build + Stash.app, ad-hoc signed
 make install            # bundle + copy to /Applications
 make clean              # remove .build and Stash.app
 ```
 
-The debug binary built by plain `swift build`/`swift run` has no app bundle, so
-`UserDefaults.standard` never sees Stash's `com.brentc22.Stash` domain and its own chevron
-never renders (see Install, above). That's expected — use `make install` when you want
-to see the real thing running.
+Two things about the plain `swift build` / `swift run` binary: it has no app bundle, so
+its own chevron never renders (see Install, above), and with no bundle identifier
+`UserDefaults.standard` writes to a different domain than the installed app reads, so
+settings made there don't show up in the real one. Use `make install` when you want to
+see the real thing running.
+
+Run the test suite with Stash **not** running. The tests read the menu bar's own log to
+verify what actually changed, and a second Stash holding its own assertion makes two of
+those measurements ambiguous.
 
 ## Settings
 
-Right-click the chevron for "Instellingen…" (Settings): a checklist of every app that
-has ever shown a status item, an auto-collapse delay, and a "Starten bij inloggen"
-(start at login) toggle backed by `SMAppService`.
+Right-click the chevron for "Instellingen…" (Settings): a checklist of every app Stash
+has seen running (apps not running right now are marked *niet actief*), an auto-collapse
+delay, and a "Starten bij inloggen" (start at login) toggle backed by `SMAppService`.
 
 <p>
   <img src="docs/images/settings-window.png" alt="Stash's settings window, listing known apps with checkboxes plus auto-collapse and login-item controls" width="420">
@@ -146,12 +167,11 @@ has ever shown a status item, an auto-collapse delay, and a "Starten bij inlogge
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
 
 ## Contributing
 
-This has been built and tested on exactly one Mac, on one build of macOS 27.0
-(26A428). If you hit different behavior — a different `LSMinimumSystemVersion` cutoff,
-a Mac where the private framework isn't present, a build where the allowlist behaves
-differently — an issue with your macOS build number and what you saw is the most useful
-thing you can send.
+This has been built and tested on exactly one Mac, on one build of macOS 27.0 (26A428).
+If you hit different behaviour — a different `LSMinimumSystemVersion` cutoff, a Mac where
+the private framework isn't present, a build where the allowlist behaves differently — an
+issue with your macOS build number and what you saw is the most useful thing you can send.
