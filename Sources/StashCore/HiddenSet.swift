@@ -13,6 +13,50 @@ public enum AppVisibility: String, CaseIterable, Sendable {
         case .alwaysHidden: return "Altijd verbergen"
         }
     }
+
+    /// SF Symbol for the per-row segmented control. Lives here next to `label` rather than
+    /// in the view so the three states keep one single description of themselves.
+    public var symbolName: String {
+        switch self {
+        case .visible:      return "eye"
+        case .hidden:       return "eye.slash"
+        case .alwaysHidden: return "lock"
+        }
+    }
+
+    /// The row buttons carry no text, so this is the only explanation the user gets —
+    /// shown as a tooltip and used as the accessibility label.
+    public var hint: String {
+        switch self {
+        case .visible:      return "Altijd zichtbaar"
+        case .hidden:       return "Verbergen achter het pijltje"
+        case .alwaysHidden: return "Nooit tonen"
+        }
+    }
+}
+
+/// Which rows the Apps tab shows, independent of the search query. Purely a view filter:
+/// it never changes an app's stored visibility, only whether you are looking at it.
+public enum AppListFilter: String, CaseIterable, Sendable {
+    case all
+    case hidden
+    case alwaysHidden
+
+    public var label: String {
+        switch self {
+        case .all:          return "Alles"
+        case .hidden:       return "Verborgen"
+        case .alwaysHidden: return "Altijd"
+        }
+    }
+
+    public func matches(_ visibility: AppVisibility) -> Bool {
+        switch self {
+        case .all:          return true
+        case .hidden:       return visibility == .hidden
+        case .alwaysHidden: return visibility == .alwaysHidden
+        }
+    }
 }
 
 /// Which bundle IDs should be hidden when the bar is collapsed, and which should never

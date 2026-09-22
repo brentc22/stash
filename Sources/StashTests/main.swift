@@ -408,4 +408,55 @@ T.test("zoekterm en eigenaars-filter werken cumulatief") {
               "com.vorssaint.utils matcht de zoekterm maar niet de eigenaars-set")
 }
 
+T.test("lijstfilter Alles/Verborgen/Altijd filtert en combineert met de zoekterm") {
+    let apps = [
+        KnownApp(id: "com.a", name: "Alfa", isRunning: true),
+        KnownApp(id: "com.b", name: "Bravo", isRunning: true),
+        KnownApp(id: "com.c", name: "Charlie", isRunning: true),
+        KnownApp(id: "com.d", name: "Bravissimo", isRunning: true),
+    ]
+    let states: [String: AppVisibility] = [
+        "com.a": .visible,
+        "com.b": .hidden,
+        "com.c": .alwaysHidden,
+        "com.d": .hidden,
+    ]
+    func visibility(_ id: String) -> AppVisibility { states[id] ?? .visible }
+
+    T.equal(apps.filtered(owners: nil, query: "", filter: .all, visibility: visibility).count, 4,
+            "Alles toont alles:")
+    T.equal(apps.filtered(owners: nil, query: "", filter: .hidden, visibility: visibility)
+                .map(\.id), ["com.b", "com.d"])
+    T.equal(apps.filtered(owners: nil, query: "", filter: .alwaysHidden, visibility: visibility)
+                .map(\.id), ["com.c"])
+
+    // Cumulatief: de zoekterm mag het segment niet vervangen. "bra" matcht Bravo en
+    // Bravissimo, allebei verborgen; met segment Altijd blijft er niets over.
+    T.equal(apps.filtered(owners: nil, query: "bra", filter: .hidden, visibility: visibility)
+                .map(\.id), ["com.b", "com.d"])
+    T.expect(apps.filtered(owners: nil, query: "bra", filter: .alwaysHidden,
+                           visibility: visibility).isEmpty,
+             "Bravo/Bravissimo zijn verborgen, niet altijd-verborgen")
+
+    // En de eigenaars-set blijft er bovenop werken.
+    T.equal(apps.filtered(owners: ["com.d"], query: "bra", filter: .hidden,
+                          visibility: visibility).map(\.id), ["com.d"])
+}
+
+T.test("elke lijstfilter- en zichtbaarheidsstand heeft een label, symbool en tooltip") {
+    for filter in AppListFilter.allCases {
+        T.expect(!filter.label.isEmpty, "\(filter) mist een label")
+    }
+    T.equal(AppListFilter.all.label, "Alles")
+    T.equal(AppListFilter.alwaysHidden.label, "Altijd")
+
+    for visibility in AppVisibility.allCases {
+        T.expect(!visibility.symbolName.isEmpty, "\(visibility) mist een SF Symbol")
+        T.expect(!visibility.hint.isEmpty, "\(visibility) mist een tooltip")
+    }
+    T.equal(AppVisibility.visible.symbolName, "eye")
+    T.equal(AppVisibility.hidden.symbolName, "eye.slash")
+    T.equal(AppVisibility.alwaysHidden.symbolName, "lock")
+}
+
 T.finish()

@@ -18,6 +18,9 @@ final class SettingsModel: ObservableObject {
     /// The search field's text. Purely a view concern — never persisted, never read by
     /// `refresh()` — so it's fine that it lives here instead of `Preferences`.
     @Published var query: String = ""
+    /// Which of Alles/Verborgen/Altijd the Apps tab shows. A view concern like `query`:
+    /// never persisted, never read by `refresh()`.
+    @Published var listFilter: AppListFilter = .all
     @Published var collapseDelay: CollapseDelay {
         didSet {
             preferences.collapseDelay = collapseDelay
@@ -164,66 +167,197 @@ struct AppsTab: View {
     @ObservedObject var model: SettingsModel
 
     /// Filters the app list for display only — never touches the hidden set. An app
-    /// filtered out of view stays hidden or visible exactly as it was; the search field
-    /// only changes what's on screen. Ownership filters first, then the search query
-    /// (`KnownApp.filtered(owners:query:)`); ownership only applies at all when the
-    /// checkbox is on — otherwise `owners` is `nil`, which already means "show everything".
+    /// filtered out of view stays hidden or visible exactly as it was; the filters only
+    /// change what's on screen. Ownership first, then the Alles/Verborgen/Altijd segment,
+    /// then the search query; ownership only applies at all when the checkbox on the
+    /// Algemeen tab is on — otherwise `owners` is `nil`, which already means "show
+    /// everything".
     private var filteredApps: [KnownApp] {
         let owners = model.showOnlyMenuBarApps ? model.menuBarOwners : nil
-        return model.apps.filtered(owners: owners, query: model.query)
+        return model.apps.filtered(owners: owners,
+                                   query: model.query,
+                                   filter: model.listFilter) { model.visibility(for: $0) }
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            searchField
+        let rows = filteredApps
+        return VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 9) {
+                searchField
+                filterBar(shown: rows.count)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+
+            list(rows)
+
             Divider()
-            list
+            statusLine(rows)
         }
     }
 
     private var searchField: some View {
-        TextField("Zoeken", text: $model.query)
-            .textFieldStyle(.roundedBorder)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            TextField("Zoeken", text: $model.query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 28)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(Color(nsColor: .textBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(Color(nsColor: .separatorColor))
+        )
     }
 
-    private var list: some View {
-        Group {
-            if filteredApps.isEmpty {
-                Text("Geen apps gevonden")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List(filteredApps) { app in
-                    HStack(spacing: 8) {
-                        if let icon = model.icon(for: app.id) {
-                            Image(nsImage: icon).resizable().frame(width: 16, height: 16)
-                        } else {
-                            Image(systemName: "app.dashed").frame(width: 16, height: 16)
-                        }
-                        Text(app.name)
-                        if !app.isRunning {
-                            Text("niet actief").font(.caption).foregroundStyle(.tertiary)
-                        }
-                        Spacer()
-                        Picker("", selection: Binding(
-                            get: { model.visibility(for: app.id) },
-                            set: { model.setVisibility($0, for: app.id) }
-                        )) {
-                            ForEach(AppVisibility.allCases, id: \.rawValue) { visibility in
-                                Text(visibility.label).tag(visibility)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                        .labelsHidden()
-                        .frame(width: 150)
+    private func filterBar(shown: Int) -> some View {
+        HStack(spacing: 7) {
+            Picker("", selection: $model.listFilter) {
+                ForEach(AppListFilter.allCases, id: \.rawValue) { filter in
+                    Text(filter.label).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            Spacer()
+            // "getoond van totaal": the total is the full inventory, so turning on the
+            // menu bar filter on the Algemeen tab is visible here as the left number
+            // dropping while the right one stays put.
+            Text("\(shown) van \(model.apps.count)")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func list(_ rows: [KnownApp]) -> some View {
+        if rows.isEmpty {
+            Text("Geen apps gevonden")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 1) {
+                    ForEach(rows) { app in
+                        row(app)
                     }
                 }
-                .listStyle(.inset)
+                .padding(.vertical, 2)
+            }
+            .padding(.horizontal, 10)
+        }
+    }
+
+    private func row(_ app: KnownApp) -> some View {
+        let visibility = model.visibility(for: app.id)
+        return HStack(spacing: 10) {
+            icon(for: app)
+            // `.lineLimit(1)` + tail truncation, not wrapping: a single long identifier
+            // like BackgroundTaskManagementAgent otherwise makes its one row taller than
+            // all the others and the list stops looking like a list.
+            Text(app.name)
+                .font(.system(size: 12.5))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .foregroundStyle(visibility == .alwaysHidden ? AnyShapeStyle(.secondary)
+                                                             : AnyShapeStyle(.primary))
+            if !app.isRunning {
+                Text("niet actief")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .layoutPriority(1)
+            }
+            Spacer(minLength: 8)
+            VisibilityPicker(selection: visibility) {
+                model.setVisibility($0, for: app.id)
             }
         }
+        .padding(.horizontal, 6)
+        .frame(height: 40)
+        // A row that is not on the default value gets a faint accent wash, so with fifty
+        // rows you can see at a glance which handful you actually changed.
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(visibility == .visible ? Color.clear : Color.accentColor.opacity(0.10))
+        )
+    }
+
+    @ViewBuilder
+    private func icon(for app: KnownApp) -> some View {
+        if let image = model.icon(for: app.id) {
+            Image(nsImage: image)
+                .resizable()
+                .frame(width: 18, height: 18)
+        } else {
+            Image(systemName: "app.dashed")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .frame(width: 18, height: 18)
+        }
+    }
+
+    private func statusLine(_ rows: [KnownApp]) -> some View {
+        let counts = Dictionary(grouping: rows) { model.visibility(for: $0.id) }
+            .mapValues(\.count)
+        return HStack {
+            Text("\(counts[.visible] ?? 0) zichtbaar · \(counts[.hidden] ?? 0) verborgen "
+                 + "· \(counts[.alwaysHidden] ?? 0) altijd verborgen")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 34)
+    }
+}
+
+/// The three states as three real buttons instead of a `Picker`. Only the active one is
+/// tinted: with fifty rows nearly all sitting on the default, the default must not draw
+/// the eye. Each is a `Button` with its own accessibility label, not a tappable `Image`.
+struct VisibilityPicker: View {
+
+    let selection: AppVisibility
+    let onSelect: (AppVisibility) -> Void
+
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(AppVisibility.allCases, id: \.rawValue) { visibility in
+                Button {
+                    onSelect(visibility)
+                } label: {
+                    Image(systemName: visibility.symbolName)
+                        .font(.system(size: 11))
+                        .foregroundStyle(visibility == selection
+                                         ? AnyShapeStyle(Color.white)
+                                         : AnyShapeStyle(.secondary))
+                        .frame(width: 30, height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(visibility == selection ? Color.accentColor : Color.clear)
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(visibility.hint)
+                .accessibilityLabel(visibility.hint)
+            }
+        }
+        .padding(2)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(nsColor: .unemphasizedSelectedContentBackgroundColor))
+        )
     }
 }
 

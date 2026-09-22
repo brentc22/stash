@@ -41,7 +41,23 @@ extension Array where Element == KnownApp {
     /// menu bar ownership, then the search query. A free function (not view logic) so it
     /// stays testable without a running app or granted permission.
     public func filtered(owners: Set<String>?, query: String) -> [KnownApp] {
-        filter { $0.hasMenuBarIcon(owners: owners) && $0.matches(searchQuery: query) }
+        filtered(owners: owners, query: query, filter: .all) { _ in .visible }
+    }
+
+    /// The same filter with the Apps tab's Alles/Verborgen/Altijd segment on top. All
+    /// three narrow cumulatively, in the fixed order ownership → visibility → query, so
+    /// picking "Verborgen" and then typing never widens the result again. `visibility`
+    /// is a closure rather than a dictionary so this stays independent of how the caller
+    /// stores state.
+    public func filtered(owners: Set<String>?,
+                         query: String,
+                         filter: AppListFilter,
+                         visibility: (String) -> AppVisibility) -> [KnownApp] {
+        self.filter {
+            $0.hasMenuBarIcon(owners: owners)
+                && filter.matches(visibility($0.id))
+                && $0.matches(searchQuery: query)
+        }
     }
 }
 
