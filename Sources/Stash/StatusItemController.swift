@@ -2,6 +2,12 @@ import AppKit
 import StashCore
 
 /// The chevron in the bar. Knows nothing about the private API.
+// @MainActor: this class only ever touches AppKit (NSStatusItem, NSButton, NSMenu),
+// created in and driven entirely by main-thread callbacks (target/action). Without it,
+// Swift 6's strict concurrency checking flags every AppKit access here as a reference
+// to main-actor-isolated state from a nonisolated context. No `deinit`, so the Task 4
+// `AppInventory` trap (a `deinit` that calls `stop()`, which cannot be actor-isolated)
+// does not apply.
 @MainActor
 final class StatusItemController: NSObject {
 

@@ -3,6 +3,15 @@ import StashCore
 
 let ownBundleID = "be.vernast.Stash"
 
+// @MainActor: every method here either touches AppKit directly (`NSApp.terminate`,
+// `StatusItemController`) or is only ever called from a main-thread callback
+// (app-lifecycle notifications, the button's target/action). Without this, Swift 6's
+// strict concurrency checking rejects the build: `rebuild()`'s completion closure
+// captures `self` and hands it to `DispatchQueue.main.async`, which the compiler treats
+// as crossing an isolation boundary for a non-Sendable type unless the class itself is
+// isolated. No `deinit` here, so this doesn't hit the trap that ruled out `@MainActor`
+// for `AppInventory` in Task 4 (its `deinit` calls `stop()`, and `deinit` cannot be
+// actor-isolated).
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
