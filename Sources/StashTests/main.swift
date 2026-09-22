@@ -236,4 +236,29 @@ T.test("inventory reageert op systeemnotificaties") {
     T.equal(callCount, 1, "na stop() hoort onChange niet meer aan te roepen:")
 }
 
+T.test("CollapseDelay rondreist door UserDefaults") {
+    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suite) else {
+        T.expect(false, "kon geen testsuite maken"); return
+    }
+    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+    let prefs = Preferences(defaults: defaults)
+    T.equal(prefs.collapseDelay, .after10, "standaard:")
+
+    prefs.collapseDelay = .never
+    T.equal(Preferences(defaults: defaults).collapseDelay, .never)
+
+    prefs.collapseDelay = .after30
+    T.equal(Preferences(defaults: defaults).collapseDelay, .after30)
+}
+
+T.test("alle vertragingen hebben een Nederlands label") {
+    for delay in CollapseDelay.allCases {
+        T.expect(!delay.label.isEmpty, "\(delay) mist een label")
+    }
+    T.equal(CollapseDelay.never.label, "Nooit")
+    T.equal(CollapseDelay.after10.label, "Na 10 seconden")
+}
+
 T.finish()

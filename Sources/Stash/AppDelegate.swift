@@ -18,7 +18,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let restriction = MenuBarRestriction()
     private let hidden = HiddenSet()
     private let inventory = AppInventory()
+    private let preferences = Preferences()
     private var statusItem: StatusItemController!
+    private var collapseTimer: CollapseTimer!
     private var state: BarState = .collapsed
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -28,6 +30,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onQuit: { [weak self] in self?.quit() }
         )
         statusItem.render(state: state, available: restriction.isAvailable)
+
+        collapseTimer = CollapseTimer { [weak self] in
+            guard let self, self.state == .expanded else { return }
+            self.toggle()
+        }
 
         inventory.onChange = { [weak self] in self?.rebuild() }
         inventory.start()
@@ -41,6 +48,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func toggle() {
         state = (state == .collapsed) ? .expanded : .collapsed
         statusItem.render(state: state, available: restriction.isAvailable)
+        if state == .expanded {
+            collapseTimer.schedule(delay: preferences.collapseDelay)
+        } else {
+            collapseTimer.cancel()
+        }
         rebuild()
     }
 
