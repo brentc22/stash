@@ -93,4 +93,70 @@ T.test("clear zet de balk volledig terug") {
     T.equal(restored, baseline, "na clear:")
 }
 
+let ownID = "be.vernast.Stash"
+
+T.test("uitgeklapt staat alles toe") {
+    let result = Allowlist.compute(
+        running: ["com.a", "com.b", "com.c"],
+        hidden: ["com.b"],
+        state: .expanded,
+        ownBundleID: ownID
+    )
+    T.equal(result, ["com.a", "com.b", "com.c", ownID])
+}
+
+T.test("ingeklapt laat de verborgen apps weg") {
+    let result = Allowlist.compute(
+        running: ["com.a", "com.b", "com.c"],
+        hidden: ["com.b"],
+        state: .collapsed,
+        ownBundleID: ownID
+    )
+    T.equal(result, ["com.a", "com.c", ownID])
+}
+
+T.test("eigen bundle id zit er altijd in, ook als hij verborgen is gemarkeerd") {
+    let result = Allowlist.compute(
+        running: ["com.a"],
+        hidden: [ownID],
+        state: .collapsed,
+        ownBundleID: ownID
+    )
+    T.expect(result.contains(ownID), "de app mag z'n eigen chevron nooit verbergen")
+}
+
+T.test("een app die start terwijl je ingeklapt bent verdwijnt niet") {
+    // This is the pitfall: the allowlist is a snapshot. If an app starts and we do not
+    // recompute, it is not in the list and disappears unwanted. Recomputing with the new
+    // inventory should bring it back.
+    let before = Allowlist.compute(
+        running: ["com.a"], hidden: ["com.b"], state: .collapsed, ownBundleID: ownID
+    )
+    T.expect(!before.contains("com.nieuw"), "opzet: com.nieuw draait nog niet")
+
+    let after = Allowlist.compute(
+        running: ["com.a", "com.nieuw"], hidden: ["com.b"], state: .collapsed, ownBundleID: ownID
+    )
+    T.expect(after.contains("com.nieuw"),
+             "een nieuw gestarte app die niet verborgen is hoort zichtbaar te blijven")
+}
+
+T.test("verborgen set overleeft opnieuw laden") {
+    let suite = "be.vernast.Stash.tests.\(UUID().uuidString)"
+    guard let defaults = UserDefaults(suiteName: suite) else {
+        T.expect(false, "kon geen testsuite maken"); return
+    }
+    defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+
+    let first = HiddenSet(defaults: defaults)
+    first.hide("com.a")
+    first.hide("com.b")
+    first.show("com.a")
+
+    let second = HiddenSet(defaults: defaults)
+    T.equal(second.bundleIDs, ["com.b"])
+    T.expect(second.isHidden("com.b"), "com.b hoort verborgen te zijn")
+    T.expect(!second.isHidden("com.a"), "com.a is weer getoond")
+}
+
 T.finish()
