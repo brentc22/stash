@@ -5,8 +5,8 @@ import Foundation
 ///
 ///   [com.apple.menubar:analytics] MenuBar.trailingItems.count payload=["count": 12]
 ///
-/// Intended for tests only, not for the app itself.
-public enum MenuBarProbe {
+/// Test-target only: it shells out to `log show`, which has no place in the shipped app.
+enum MenuBarProbe {
 
     /// `log show --start` only accepts second-granularity local timestamps (no fractional
     /// seconds) in one of a few fixed formats. en_US_POSIX so the locale never swaps digits,
@@ -43,7 +43,7 @@ public enum MenuBarProbe {
     /// the real budget is closer to four attempts than fifty in that case. Returns nil only
     /// once all attempts are exhausted.
     /// `--info --debug` is required: without those flags `log show` omits these lines entirely.
-    public static func lastTrailingItemsCount(since: Date) -> Int? {
+    static func lastTrailingItemsCount(since: Date) -> Int? {
         // Floor to whole milliseconds — the same precision `log show`'s compact style
         // prints and `lineTimestampFormatter` re-parses. Comparing a sub-millisecond
         // `Date()` against a millisecond-truncated log timestamp let a genuinely later
