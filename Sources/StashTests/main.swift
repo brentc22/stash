@@ -341,4 +341,71 @@ T.test("sneltoets-voorkeur staat standaard uit en reist rond door UserDefaults")
     }
 }
 
+T.test("showOnlyMenuBarApps staat standaard uit en reist rond door UserDefaults") {
+    withTestDefaults { defaults in
+        let prefs = Preferences(defaults: defaults)
+        T.expect(!prefs.showOnlyMenuBarApps, "standaard uit: filteren kost een permissie "
+                 + "die de gebruiker nog niet gegeven heeft")
+
+        prefs.showOnlyMenuBarApps = true
+        T.expect(Preferences(defaults: defaults).showOnlyMenuBarApps,
+                  "aan-stand hoort opnieuw te laden als aan")
+
+        prefs.showOnlyMenuBarApps = false
+        T.expect(!Preferences(defaults: defaults).showOnlyMenuBarApps,
+                  "uit-stand hoort opnieuw te laden als uit")
+    }
+}
+
+T.test("filterfunctie met nil eigenaars-set geeft alle apps terug") {
+    let apps = [
+        KnownApp(id: "com.a", name: "A", isRunning: true),
+        KnownApp(id: "com.b", name: "B", isRunning: true),
+    ]
+    let result = apps.filtered(owners: nil, query: "")
+    T.equal(result.count, 2, "nil betekent onbekend, dus alles tonen:")
+}
+
+T.test("filterfunctie met een lege eigenaars-set geeft alle apps terug, niet nul") {
+    let apps = [
+        KnownApp(id: "com.a", name: "A", isRunning: true),
+        KnownApp(id: "com.b", name: "B", isRunning: true),
+    ]
+    let result = apps.filtered(owners: [], query: "")
+    T.equal(result.count, 2, "een lege set mag nooit de hele lijst leegmaken:")
+}
+
+T.test("filterfunctie met een gevulde eigenaars-set geeft alleen die apps terug") {
+    let apps = [
+        KnownApp(id: "com.a", name: "A", isRunning: true),
+        KnownApp(id: "com.b", name: "B", isRunning: true),
+        KnownApp(id: "com.c", name: "C", isRunning: true),
+    ]
+    let result = apps.filtered(owners: ["com.b"], query: "")
+    T.equal(result.map(\.id), ["com.b"])
+}
+
+T.test("zoekterm en eigenaars-filter werken cumulatief") {
+    let apps = [
+        KnownApp(id: "com.raycast.macos", name: "Raycast", isRunning: true),
+        KnownApp(id: "com.apple.weather.menu", name: "Weather", isRunning: true),
+        KnownApp(id: "com.vorssaint.utils", name: "Utils", isRunning: true),
+    ]
+    let owners: Set<String> = ["com.raycast.macos", "com.apple.weather.menu"]
+
+    // Owners alone would keep raycast + weather; adding a search query on top must
+    // narrow that further, not replace it or ignore it.
+    let ownersOnly = apps.filtered(owners: owners, query: "")
+    T.equal(Set(ownersOnly.map(\.id)), ["com.raycast.macos", "com.apple.weather.menu"])
+
+    let ownersAndQuery = apps.filtered(owners: owners, query: "ray")
+    T.equal(ownersAndQuery.map(\.id), ["com.raycast.macos"],
+            "moet cumulatief filteren, niet alleen op de zoekterm:")
+
+    // A query matching an app outside the owners set must still exclude it.
+    let excludedByOwners = apps.filtered(owners: owners, query: "utils")
+    T.expect(excludedByOwners.isEmpty,
+              "com.vorssaint.utils matcht de zoekterm maar niet de eigenaars-set")
+}
+
 T.finish()

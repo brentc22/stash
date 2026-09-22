@@ -21,6 +21,7 @@ public final class Preferences {
 
     private static let collapseDelayKey = "collapseDelaySeconds"
     private static let useGlobalHotKeyKey = "useGlobalHotKey"
+    private static let showOnlyMenuBarAppsKey = "showOnlyMenuBarApps"
 
     private let defaults: UserDefaults
 
@@ -43,6 +44,15 @@ public final class Preferences {
     public var useGlobalHotKey: Bool {
         get { defaults.bool(forKey: Self.useGlobalHotKeyKey) }
         set { defaults.set(newValue, forKey: Self.useGlobalHotKeyKey) }
+    }
+
+    /// Whether the settings list should be filtered to apps that actually own a menu bar
+    /// item. Default `false`: this depends on the optional Accessibility permission, and
+    /// Stash must not ask for it unprompted. `bool(forKey:)` already returns `false` for
+    /// an absent key, same as `useGlobalHotKey` above.
+    public var showOnlyMenuBarApps: Bool {
+        get { defaults.bool(forKey: Self.showOnlyMenuBarAppsKey) }
+        set { defaults.set(newValue, forKey: Self.showOnlyMenuBarAppsKey) }
     }
 }
 

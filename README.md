@@ -165,13 +165,41 @@ those measurements ambiguous.
 
 ## Settings
 
-Right-click the arrow for "Instellingen…" (Settings): a checklist of every app Stash
-has seen running (apps not running right now are marked *niet actief*), an auto-collapse
-delay, and a "Starten bij inloggen" (start at login) toggle backed by `SMAppService`.
+Right-click the arrow for "Instellingen…" (Settings): a search field, a checklist of
+every app Stash has seen running (apps not running right now are marked *niet actief*)
+with a per-app Zichtbaar/Verbergen/Altijd verbergen picker, an auto-collapse delay, a
+"Starten bij inloggen" (start at login) toggle backed by `SMAppService`, an optional
+global hotkey (⌃⌥S), and an optional "Toon alleen apps met een menubalk-icoon" filter
+(see below).
 
 <p>
   <img src="docs/images/settings-window.png" alt="Stash's settings window, listing known apps with checkboxes plus auto-collapse and login-item controls" width="420">
 </p>
+
+### Optional: filtering the list to apps with a real menu bar icon
+
+By default the settings list shows every running app that *could* have a status item —
+about 112 processes on a typical machine, of which maybe 8 actually draw one. Turning on
+"Toon alleen apps met een menubalk-icoon" narrows that list to the apps that genuinely
+own one, detected via `AXUIElementCopyAttributeValue(_:"AXExtrasMenuBar", _)` — see
+`.superpowers/sdd/2026-09-22-stash/menubar-detection-research.md` for the full
+measurement and why the private `MenuBarClientCore` enumeration API was not used instead
+(it is gated behind an Apple-only entitlement).
+
+This is purely a display filter — hiding, showing, the hotkey and everything else work
+identically whether it is on or off. Turning it on for the first time asks macOS for the
+**Accessibility** permission; declining it, or never turning the checkbox on, costs
+nothing and the settings list simply stays unfiltered.
+
+**The Accessibility grant does not survive `make install`.** It is tied to the running
+binary's code signature, and `make install` re-signs ad-hoc (`codesign --sign -`) on
+every build, which changes that signature. Concretely observed on this machine: System
+Settings → Privacy & Security → Accessibility kept showing "Stash" toggled on from an
+earlier build, but the freshly reinstalled binary still read `AXIsProcessTrusted() ==
+false` until the toggle was switched off and back on for that new binary. Expect to
+re-grant Accessibility after every `make install` during development; a binary installed
+once via a Release build and left alone should not have this problem, since nothing
+re-signs it again.
 
 ## Uninstall
 

@@ -57,6 +57,34 @@ final class SettingsModel: ObservableObject {
             }
         }
     }
+    /// "Toon alleen apps met een menubalk-icoon". Turning this on for the first time
+    /// requests the Accessibility permission; `AXIsProcessTrustedWithOptions` returns
+    /// immediately without waiting for the user, so right after asking, trust is still
+    /// whatever it was before. If that isn't `true`, the checkbox must not keep claiming
+    /// an "on" state the system never granted — same reconciliation pattern as
+    /// `launchAtLogin` and `useGlobalHotKey` above, and the same mistake (F18, F12) this
+    /// whole house pattern exists to avoid repeating.
+    @Published var showOnlyMenuBarApps: Bool {
+        didSet {
+            guard !isReconcilingMenuBarFilter else { return }
+            if showOnlyMenuBarApps, !MenuBarOwners.isTrusted {
+                MenuBarOwners.requestTrust()
+                if !MenuBarOwners.isTrusted {
+                    isReconcilingMenuBarFilter = true
+                    showOnlyMenuBarApps = false
+                    isReconcilingMenuBarFilter = false
+                }
+            }
+            preferences.showOnlyMenuBarApps = showOnlyMenuBarApps
+            // Re-sweep whenever this changes, and (via `refresh()`, which also assigns
+            // here) every time the settings window opens — never per render or keystroke.
+            inventory.refreshMenuBarOwners()
+            menuBarOwners = inventory.menuBarOwners
+        }
+    }
+    /// Cached sweep result, mirrored from `AppInventory` for the view to read. `nil` means
+    /// "unknown" (not granted / never swept) and must be treated as "show everything".
+    @Published var menuBarOwners: Set<String>?
 
     private let inventory: AppInventory
     private let hidden: HiddenSet
@@ -65,6 +93,7 @@ final class SettingsModel: ObservableObject {
     private let onHotKeyPreferenceChanged: () -> Void
     private var isReconcilingLaunchAtLogin = false
     private var isReconcilingHotKeyPreference = false
+    private var isReconcilingMenuBarFilter = false
 
     init(inventory: AppInventory,
          hidden: HiddenSet,
@@ -79,17 +108,23 @@ final class SettingsModel: ObservableObject {
         self.collapseDelay = preferences.collapseDelay
         self.launchAtLogin = preferences.launchAtLogin
         self.useGlobalHotKey = preferences.useGlobalHotKey
+        self.showOnlyMenuBarApps = preferences.showOnlyMenuBarApps
         refresh()
     }
 
     /// Reloads the app list and hidden set from the source of truth. Called when the
     /// window is shown, so an app launched while the window was closed still shows up.
+    /// Also where the menu bar ownership sweep runs (via `showOnlyMenuBarApps`'s
+    /// `didSet`) — the settings window opening is one of the two triggers the brief
+    /// specifies, launch/terminate (inside `AppInventory`) being the other.
     func refresh() {
         apps = inventory.knownApps.filter { $0.id != ownBundleID }
         visibilities = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, hidden.visibility(for: $0.id)) })
         collapseDelay = preferences.collapseDelay
         launchAtLogin = preferences.launchAtLogin
         useGlobalHotKey = preferences.useGlobalHotKey
+        showOnlyMenuBarApps = preferences.showOnlyMenuBarApps
+        menuBarOwners = inventory.menuBarOwners
     }
 
     func visibility(for bundleID: String) -> AppVisibility {
@@ -111,9 +146,12 @@ struct SettingsView: View {
 
     /// Filters the app list for display only — never touches the hidden set. An app
     /// filtered out of view stays hidden or visible exactly as it was; the search field
-    /// only changes what's on screen.
+    /// only changes what's on screen. Ownership filters first, then the search query
+    /// (`KnownApp.filtered(owners:query:)`); ownership only applies at all when the
+    /// checkbox is on — otherwise `owners` is `nil`, which already means "show everything".
     private var filteredApps: [KnownApp] {
-        model.apps.filter { $0.matches(searchQuery: model.query) }
+        let owners = model.showOnlyMenuBarApps ? model.menuBarOwners : nil
+        return model.apps.filtered(owners: owners, query: model.query)
     }
 
     var body: some View {
@@ -204,6 +242,18 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             Toggle("Sneltoets ⌃⌥S gebruiken", isOn: $model.useGlobalHotKey)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("Toon alleen apps met een menubalk-icoon", isOn: $model.showOnlyMenuBarApps)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if !MenuBarOwners.isTrusted {
+                    Text("Hiervoor vraagt macOS toestemming voor Toegankelijkheid. Stash "
+                         + "werkt ook zonder die toestemming — dit vinkje filtert dan "
+                         + "gewoon niet.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
         .padding(16)
     }

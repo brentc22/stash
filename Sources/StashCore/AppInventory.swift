@@ -21,6 +21,28 @@ extension KnownApp {
         return name.localizedCaseInsensitiveContains(query)
             || id.localizedCaseInsensitiveContains(query)
     }
+
+    /// Whether this app survives the "only apps with a menu bar icon" filter.
+    ///
+    /// `owners == nil` means the Accessibility sweep is unavailable or has never run —
+    /// "unknown", not "none" — so every app passes. An empty, non-`nil` set is treated the
+    /// same way: a real sweep on this app (Stash always owns its own item) can never come
+    /// back genuinely empty, so an empty result also means "not meaningful", never "hide
+    /// everything". This is the rule the whole feature hinges on: a wrong read here empties
+    /// the settings list and the user can no longer configure anything.
+    public func hasMenuBarIcon(owners: Set<String>?) -> Bool {
+        guard let owners, !owners.isEmpty else { return true }
+        return owners.contains(id)
+    }
+}
+
+extension Array where Element == KnownApp {
+    /// The settings list's combined filter, in the fixed order the brief specifies: first
+    /// menu bar ownership, then the search query. A free function (not view logic) so it
+    /// stays testable without a running app or granted permission.
+    public func filtered(owners: Set<String>?, query: String) -> [KnownApp] {
+        filter { $0.hasMenuBarIcon(owners: owners) && $0.matches(searchQuery: query) }
+    }
 }
 
 /// Tracks which apps are running and which ones we have ever seen.
@@ -39,6 +61,7 @@ public final class AppInventory: @unchecked Sendable {
     private let defaults: UserDefaults
     private var names: [String: String]
     private var observers: [NSObjectProtocol] = []
+    private var cachedMenuBarOwners: Set<String>?
 
     public var onChange: (() -> Void)?
 
@@ -69,8 +92,21 @@ public final class AppInventory: @unchecked Sendable {
 
     public func refresh() {
         rememberRunningNames()
+        refreshMenuBarOwners()
         onChange?()
     }
+
+    /// Re-sweeps which running apps currently own a menu bar item and caches the result.
+    /// The sweep costs ~263 ms (measured in menubar-detection-research.md), so it must
+    /// never run on every UI render — only here, which fires on launch/terminate via
+    /// `start()`'s observers, and explicitly when the settings window opens.
+    public func refreshMenuBarOwners() {
+        cachedMenuBarOwners = MenuBarOwners.sweep()
+    }
+
+    /// `nil` when Accessibility is not granted or no sweep has run yet — callers must
+    /// treat that the same as an empty result: "unknown", show everything.
+    public var menuBarOwners: Set<String>? { cachedMenuBarOwners }
 
     public var runningBundleIDs: Set<String> {
         Set(eligibleApplications().compactMap(\.bundleIdentifier))
