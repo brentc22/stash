@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let preferences = Preferences()
     private var statusItem: StatusItemController!
     private var collapseTimer: CollapseTimer!
+    private var settingsWindow: SettingsWindowController!
     private var state: BarState = .collapsed
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -39,6 +40,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         inventory.onChange = { [weak self] in self?.rebuild() }
         inventory.start()
         rebuild()
+
+        let model = SettingsModel(
+            inventory: inventory,
+            hidden: hidden,
+            preferences: preferences
+        ) { [weak self] in
+            self?.rebuild()
+        }
+        settingsWindow = SettingsWindowController(model: model)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -77,7 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showSettings() {
-        // Filled in in task 7.
+        settingsWindow.show()
     }
 
     private func quit() {
