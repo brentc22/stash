@@ -9,9 +9,8 @@ let ownBundleID = "com.brentc22.Stash"
 // strict concurrency checking rejects the build: `rebuild()`'s completion closure
 // captures `self` and hands it to `DispatchQueue.main.async`, which the compiler treats
 // as crossing an isolation boundary for a non-Sendable type unless the class itself is
-// isolated. No `deinit` here, so this doesn't hit the trap that ruled out `@MainActor`
-// for `AppInventory` in Task 4 (its `deinit` calls `stop()`, and `deinit` cannot be
-// actor-isolated).
+// isolated. No `deinit` here, so this doesn't hit the trap that rules out `@MainActor`
+// for `AppInventory` (its `deinit` calls `stop()`, and `deinit` cannot be actor-isolated).
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
@@ -25,6 +24,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsModel: SettingsModel!
     private var hotKey: GlobalHotKey!
     private var state: BarState = .collapsed
+    /// The allowlist last handed to `restriction`, or `nil` when none is known to be
+    /// active. `rebuild()` fires on every change to the running apps — most of them
+    /// helper processes that never reach the allowlist — and each `apply` builds a new
+    /// system assertion, so an identical list is skipped.
+    private var appliedAllowlist: Set<String>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Single-instance guard: `make install` replaces the bundle on disk, but a
@@ -111,11 +115,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state: state,
             ownBundleID: ownBundleID
         )
+        guard allowed != appliedAllowlist else { return }
+        appliedAllowlist = allowed
         restriction.apply(allowing: allowed) { [weak self] error in
             guard let error else { return }
             NSLog("Stash: kon restrictie niet toepassen: \(error)")
             DispatchQueue.main.async {
                 guard let self else { return }
+                // Unknown what is active now, so the next rebuild must apply again.
+                self.appliedAllowlist = nil
                 self.statusItem.render(state: self.state, available: false)
             }
         }
@@ -131,8 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Returns whether the shortcut is now genuinely in the state the preference claims.
     /// `false` means Carbon refused the combination — another app already holds it — and
     /// the caller must not let the recorder field keep showing it. Not a crash, not a
-    /// silent failure: the `OSStatus` is logged (the same F18 mistake this house pattern
-    /// exists to avoid: a control asserting something untrue).
+    /// silent failure: the `OSStatus` is logged, so a control never asserts something
+    /// untrue.
     @discardableResult
     private func syncHotKeyRegistration() -> Bool {
         guard let combo = preferences.hotKey else {

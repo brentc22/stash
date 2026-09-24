@@ -37,15 +37,9 @@ extension KnownApp {
 }
 
 extension Array where Element == KnownApp {
-    /// The settings list's combined filter, in the fixed order the brief specifies: first
-    /// menu bar ownership, then the search query. A free function (not view logic) so it
-    /// stays testable without a running app or granted permission.
-    public func filtered(owners: Set<String>?, query: String) -> [KnownApp] {
-        filtered(owners: owners, query: query, filter: .all) { _ in .visible }
-    }
-
-    /// The same filter with the Apps tab's Alles/Verborgen/Altijd segment on top. All
-    /// three narrow cumulatively, in the fixed order ownership → visibility → query, so
+    /// The Apps tab's combined filter: menu bar ownership, the Alles/Verborgen/Altijd
+    /// segment and the search query. A free function (not view logic) so it stays testable
+    /// without a running app or granted permission. All three narrow cumulatively, in the fixed order ownership → visibility → query, so
     /// picking "Verborgen" and then typing never widens the result again. `visibility`
     /// is a closure rather than a dictionary so this stays independent of how the caller
     /// stores state.
@@ -76,7 +70,7 @@ public final class AppInventory: @unchecked Sendable {
 
     private let defaults: UserDefaults
     private var names: [String: String]
-    private var observers: [NSObjectProtocol] = []
+    private var observation: NSKeyValueObservation?
     private var cachedMenuBarOwners: Set<String>?
 
     public var onChange: (() -> Void)?
@@ -89,33 +83,30 @@ public final class AppInventory: @unchecked Sendable {
 
     deinit { stop() }
 
+    /// Observes `runningApplications` via KVO instead of `didLaunchApplicationNotification`:
+    /// that notification only fires for apps with a Dock icon, and menu bar apps
+    /// (`LSUIElement`) have none — precisely the apps Stash exists for. Measured
+    /// 24-09-2026: launching Portside fired the KVO change, not the notification.
     public func start() {
-        let center = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.didLaunchApplicationNotification,
-                     NSWorkspace.didTerminateApplicationNotification] {
-            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                self?.refresh()
-            }
-            observers.append(token)
+        observation = NSWorkspace.shared.observe(\.runningApplications) { [weak self] _, _ in
+            DispatchQueue.main.async { self?.refresh() }
         }
     }
 
     public func stop() {
-        let center = NSWorkspace.shared.notificationCenter
-        observers.forEach { center.removeObserver($0) }
-        observers.removeAll()
+        observation = nil
     }
 
     public func refresh() {
         rememberRunningNames()
-        refreshMenuBarOwners()
         onChange?()
     }
 
     /// Re-sweeps which running apps currently own a menu bar item and caches the result.
-    /// The sweep costs ~263 ms (measured in menubar-detection-research.md), so it must
-    /// never run on every UI render — only here, which fires on launch/terminate via
-    /// `start()`'s observers, and explicitly when the settings window opens.
+    /// The sweep costs ~263 ms on the main thread (measured in menubar-detection-research.md),
+    /// so it runs only on demand — from `SettingsModel.refreshTrust()`, and only while the
+    /// filter is wanted. Not from `refresh()`: that fires on every change to the running
+    /// apps, and nothing reads this cache without sweeping first anyway.
     public func refreshMenuBarOwners() {
         cachedMenuBarOwners = MenuBarOwners.sweep()
     }
@@ -132,8 +123,12 @@ public final class AppInventory: @unchecked Sendable {
         let running = runningBundleIDs
         let ids = Set(names.keys).union(running)
         return ids
-            .map { KnownApp(id: $0, name: names[$0] ?? $0, isRunning: running.contains($0)) }
+            .map { KnownApp(id: $0, name: names[$0] ?? liveName($0) ?? $0, isRunning: running.contains($0)) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private func liveName(_ bundleID: String) -> String? {
+        NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == bundleID }?.localizedName
     }
 
     public func icon(for bundleID: String) -> NSImage? {

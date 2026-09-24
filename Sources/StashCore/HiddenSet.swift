@@ -79,22 +79,6 @@ public final class HiddenSet {
     public var bundleIDs: Set<String> { storage }
     public var alwaysHiddenBundleIDs: Set<String> { alwaysHiddenStorage }
 
-    public func isHidden(_ bundleID: String) -> Bool { storage.contains(bundleID) }
-
-    public func hide(_ bundleID: String) {
-        guard storage.insert(bundleID).inserted else { return }
-        persist()
-    }
-
-    public func show(_ bundleID: String) {
-        guard storage.remove(bundleID) != nil else { return }
-        persist()
-    }
-
-    public func setHidden(_ hidden: Bool, for bundleID: String) {
-        hidden ? hide(bundleID) : show(bundleID)
-    }
-
     /// The three-state visibility for one app. An app that ended up in both the hidden
     /// and always-hidden sets — should not happen through the UI, which only ever puts
     /// an app in one of them, but a hand-edited or migrated defaults file could — counts
@@ -106,6 +90,7 @@ public final class HiddenSet {
     }
 
     public func setVisibility(_ visibility: AppVisibility, for bundleID: String) {
+        guard self.visibility(for: bundleID) != visibility else { return }
         switch visibility {
         case .visible:
             storage.remove(bundleID)

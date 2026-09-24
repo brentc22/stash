@@ -17,8 +17,24 @@ bundle: build
 	-cp Resources/$(APP).icns $(CONTENTS)/Resources/$(APP).icns
 	$(MAKE) sign
 
+# Sign with a stable identity when one exists, ad-hoc otherwise.
+# An ad-hoc signature makes the designated requirement the binary's own hash,
+# so every rebuild is a new identity to macOS and the Accessibility grant stops
+# applying. Resources/make-signing-cert.sh creates a local certificate that
+# keeps the identity stable. Override with STASH_SIGN_IDENTITY.
 sign:
-	codesign --force --deep --sign - $(BUNDLE)
+	@id="$${STASH_SIGN_IDENTITY:-}"; \
+	if [ -z "$$id" ] && security find-identity -p codesigning 2>/dev/null | grep -q "Stash Self-Signed"; then \
+		id="Stash Self-Signed"; \
+	fi; \
+	if [ -z "$$id" ]; then \
+		id="-"; \
+		echo "signing ad-hoc — the Accessibility permission will not survive the next build"; \
+		echo "run Resources/make-signing-cert.sh once to keep it"; \
+	else \
+		echo "signing with identity: $$id"; \
+	fi; \
+	codesign --force --deep --sign "$$id" $(BUNDLE)
 	codesign --verify --verbose $(BUNDLE)
 
 install: bundle

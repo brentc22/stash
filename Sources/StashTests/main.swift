@@ -160,14 +160,14 @@ T.test("een app die start terwijl je ingeklapt bent verdwijnt niet") {
 T.test("verborgen set overleeft opnieuw laden") {
     withTestDefaults { defaults in
         let first = HiddenSet(defaults: defaults)
-        first.hide("com.a")
-        first.hide("com.b")
-        first.show("com.a")
+        first.setVisibility(.hidden, for: "com.a")
+        first.setVisibility(.hidden, for: "com.b")
+        first.setVisibility(.visible, for: "com.a")
 
         let second = HiddenSet(defaults: defaults)
         T.equal(second.bundleIDs, ["com.b"])
-        T.expect(second.isHidden("com.b"), "com.b hoort verborgen te zijn")
-        T.expect(!second.isHidden("com.a"), "com.a is weer getoond")
+        T.equal(second.visibility(for: "com.b"), .hidden, "com.b:")
+        T.equal(second.visibility(for: "com.a"), .visible, "com.a is weer getoond:")
     }
 }
 
@@ -203,32 +203,29 @@ T.test("inventory meldt een wijziging") {
     }
 }
 
-T.test("inventory reageert op systeemnotificaties") {
+T.test("inventory reageert op het starten en stoppen van apps") {
     withTestDefaults { defaults in
         let inventory = AppInventory(defaults: defaults)
         var callCount = 0
         inventory.onChange = { callCount += 1 }
         inventory.start()
 
-        // Post didLaunchApplicationNotification manually
-        NSWorkspace.shared.notificationCenter.post(
-            name: NSWorkspace.didLaunchApplicationNotification,
-            object: NSWorkspace.shared
-        )
-        // Spin the run loop to let the notification be delivered on .main
-        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        // A real launch: KVO on runningApplications can't be faked with a posted notification.
+        // -g -j: in the background and hidden, so the test doesn't steal focus.
+        let app = "/System/Applications/Calculator.app"
+        let wasRunning = !NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.calculator").isEmpty
+        _ = Process.launchedProcess(launchPath: "/usr/bin/open", arguments: ["-g", "-j", app])
+        let deadline = Date().addingTimeInterval(5)
+        while callCount == 0, Date() < deadline { RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+        T.expect(wasRunning || callCount > 0, "start() moet onChange aanroepen als een app start")
 
-        T.expect(callCount == 1, "start() moet onChange aanroepen na systeemnotificatie")
-
-        // Now stop and post again
         inventory.stop()
-        NSWorkspace.shared.notificationCenter.post(
-            name: NSWorkspace.didLaunchApplicationNotification,
-            object: NSWorkspace.shared
-        )
-        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
-
-        T.equal(callCount, 1, "na stop() hoort onChange niet meer aan te roepen:")
+        let before = callCount
+        if !wasRunning {
+            NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.calculator").forEach { $0.terminate() }
+            RunLoop.current.run(until: Date().addingTimeInterval(1))
+        }
+        T.equal(callCount, before, "na stop() hoort onChange niet meer aan te roepen:")
     }
 }
 
@@ -362,7 +359,7 @@ T.test("filterfunctie met nil eigenaars-set geeft alle apps terug") {
         KnownApp(id: "com.a", name: "A", isRunning: true),
         KnownApp(id: "com.b", name: "B", isRunning: true),
     ]
-    let result = apps.filtered(owners: nil, query: "")
+    let result = apps.filtered(owners: nil, query: "", filter: .all) { _ in .visible }
     T.equal(result.count, 2, "nil betekent onbekend, dus alles tonen:")
 }
 
@@ -371,7 +368,7 @@ T.test("filterfunctie met een lege eigenaars-set geeft alle apps terug, niet nul
         KnownApp(id: "com.a", name: "A", isRunning: true),
         KnownApp(id: "com.b", name: "B", isRunning: true),
     ]
-    let result = apps.filtered(owners: [], query: "")
+    let result = apps.filtered(owners: [], query: "", filter: .all) { _ in .visible }
     T.equal(result.count, 2, "een lege set mag nooit de hele lijst leegmaken:")
 }
 
@@ -381,7 +378,7 @@ T.test("filterfunctie met een gevulde eigenaars-set geeft alleen die apps terug"
         KnownApp(id: "com.b", name: "B", isRunning: true),
         KnownApp(id: "com.c", name: "C", isRunning: true),
     ]
-    let result = apps.filtered(owners: ["com.b"], query: "")
+    let result = apps.filtered(owners: ["com.b"], query: "", filter: .all) { _ in .visible }
     T.equal(result.map(\.id), ["com.b"])
 }
 
@@ -395,15 +392,15 @@ T.test("zoekterm en eigenaars-filter werken cumulatief") {
 
     // Owners alone would keep raycast + weather; adding a search query on top must
     // narrow that further, not replace it or ignore it.
-    let ownersOnly = apps.filtered(owners: owners, query: "")
+    let ownersOnly = apps.filtered(owners: owners, query: "", filter: .all) { _ in .visible }
     T.equal(Set(ownersOnly.map(\.id)), ["com.raycast.macos", "com.apple.weather.menu"])
 
-    let ownersAndQuery = apps.filtered(owners: owners, query: "ray")
+    let ownersAndQuery = apps.filtered(owners: owners, query: "ray", filter: .all) { _ in .visible }
     T.equal(ownersAndQuery.map(\.id), ["com.raycast.macos"],
             "moet cumulatief filteren, niet alleen op de zoekterm:")
 
     // A query matching an app outside the owners set must still exclude it.
-    let excludedByOwners = apps.filtered(owners: owners, query: "utils")
+    let excludedByOwners = apps.filtered(owners: owners, query: "utils", filter: .all) { _ in .visible }
     T.expect(excludedByOwners.isEmpty,
               "com.vorssaint.utils matcht de zoekterm maar niet de eigenaars-set")
 }
@@ -538,7 +535,7 @@ T.test("filter wil aan maar zonder toestemming: volledige lijst, niet leeg") {
         KnownApp(id: "com.a", name: "A", isRunning: true),
         KnownApp(id: "com.b", name: "B", isRunning: true),
     ]
-    T.equal(apps.filtered(owners: owners, query: "").count, 2,
+    T.equal(apps.filtered(owners: owners, query: "", filter: .all) { _ in .visible }.count, 2,
             "en onbekend betekent: alles tonen:")
 }
 

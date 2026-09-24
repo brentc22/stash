@@ -7,7 +7,7 @@ import StashCore
 // `HiddenSet`, `Preferences`) are only ever touched from the main thread — `AppInventory`
 // documents that invariant itself, and `HiddenSet`/`Preferences` are plain, non-Sendable
 // classes that AppDelegate (itself `@MainActor`) constructs and hands over. No `deinit`
-// here, so unlike `AppInventory` (Task 4) and `CollapseTimer` (Task 6) — both of which need
+// here, so unlike `AppInventory` and `CollapseTimer` — both of which need
 // `@unchecked Sendable` because a nonisolated `deinit` may not call a `@MainActor` method —
 // `@MainActor` is available and is the natural fit for a view model driving a window.
 @MainActor
@@ -109,9 +109,8 @@ final class SettingsModel: ObservableObject {
     /// Reloads the app list and hidden set from the source of truth. Called when the
     /// window is shown, so an app launched while the window was closed still shows up.
     /// Also where the Accessibility trust is re-read and the menu bar ownership sweep
-    /// runs (via `refreshTrust()`) — the settings window opening is one of the triggers
-    /// the brief specifies, launch/terminate (inside `AppInventory`) and the app becoming
-    /// active again being the others.
+    /// runs (via `refreshTrust()`) — the settings window opening is one of the two
+    /// triggers, the app becoming active again being the other.
     func refresh() {
         apps = inventory.knownApps.filter { $0.id != ownBundleID }
         visibilities = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, hidden.visibility(for: $0.id)) })

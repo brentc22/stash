@@ -8,7 +8,7 @@ import StashCore
 /// Route verified on this machine on a bare CLT build with no entitlements:
 /// `InstallEventHandler` and `RegisterEventHotKey` both return status 0.
 /// `NSEvent.addGlobalMonitorForEvents` is deliberately not used — it requires
-/// Accessibility permission, and Stash asks for zero permissions.
+/// Accessibility permission, and the shortcut must work without it.
 ///
 /// `@unchecked Sendable`: `deinit` calls `unregister()`, which touches Carbon's C API —
 /// not actor-isolated work, and a `deinit` can never call a `@MainActor` method, so this
@@ -54,14 +54,6 @@ final class GlobalHotKey: @unchecked Sendable {
     /// a shortcut that was never actually registered.
     @discardableResult
     func register(_ combo: HotKeyCombo) -> Bool {
-        register(keyCode: combo.keyCode, modifiers: combo.modifiers)
-    }
-
-    /// - Parameter modifiers: Cocoa `NSEvent.ModifierFlags` raw value, as recorded from
-    ///   the event. Translated to Carbon's own bits here — that translation belongs with
-    ///   the Carbon call, not with the storage type.
-    @discardableResult
-    func register(keyCode: UInt16, modifiers: UInt) -> Bool {
         unregister()
         Self.activeInstance = self
 
@@ -85,8 +77,8 @@ final class GlobalHotKey: @unchecked Sendable {
         let hotKeyID = EventHotKeyID(signature: Self.signature, id: 1)
         var ref: EventHotKeyRef?
         let registerStatus = RegisterEventHotKey(
-            UInt32(keyCode),
-            Self.carbonModifiers(from: modifiers),
+            UInt32(combo.keyCode),
+            Self.carbonModifiers(from: combo.modifiers),
             hotKeyID,
             GetApplicationEventTarget(),
             0,
@@ -119,13 +111,10 @@ final class GlobalHotKey: @unchecked Sendable {
         }
     }
 
-    /// Called from the C callback below, already on the main run loop in practice. Hops
-    /// to the main queue explicitly anyway rather than leaning on that — the same
-    /// `DispatchQueue.main.async` idiom `AppDelegate.rebuild()` already uses to call back
-    /// into `@MainActor` code from a plain, non-isolated callback closure.
     /// Cocoa modifier bits to Carbon's. The two sets are unrelated integers; there is no
-    /// shared header, so this mapping is written out rather than cast.
-    static func carbonModifiers(from cocoa: UInt) -> UInt32 {
+    /// shared header, so this mapping is written out rather than cast. Lives with the
+    /// Carbon call, not with the storage type `HotKeyCombo`.
+    private static func carbonModifiers(from cocoa: UInt) -> UInt32 {
         let flags = NSEvent.ModifierFlags(rawValue: cocoa)
         var carbon: UInt32 = 0
         if flags.contains(.command) { carbon |= UInt32(cmdKey) }
@@ -135,6 +124,10 @@ final class GlobalHotKey: @unchecked Sendable {
         return carbon
     }
 
+    /// Called from the C callback below, already on the main run loop in practice. Hops
+    /// to the main queue explicitly anyway rather than leaning on that — the same
+    /// `DispatchQueue.main.async` idiom `AppDelegate.rebuild()` uses to call back into
+    /// `@MainActor` code from a plain, non-isolated callback closure.
     fileprivate func fire() {
         DispatchQueue.main.async { [onTrigger] in
             onTrigger()

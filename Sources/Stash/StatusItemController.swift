@@ -5,7 +5,7 @@ import StashCore
 // @MainActor: this class only ever touches AppKit (NSStatusItem, NSButton, NSMenu),
 // created in and driven entirely by main-thread callbacks (target/action). Without it,
 // Swift 6's strict concurrency checking flags every AppKit access here as a reference
-// to main-actor-isolated state from a nonisolated context. No `deinit`, so the Task 4
+// to main-actor-isolated state from a nonisolated context. No `deinit`, so the
 // `AppInventory` trap (a `deinit` that calls `stop()`, which cannot be actor-isolated)
 // does not apply.
 @MainActor

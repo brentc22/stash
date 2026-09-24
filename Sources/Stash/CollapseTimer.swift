@@ -3,7 +3,7 @@ import StashCore
 
 /// Klapt de balk vanzelf weer in. Eén timer, altijd eerst geannuleerd voor een nieuwe.
 /// - Note: Marked `@unchecked Sendable` rather than `@MainActor`, on the same precedent
-///   as `AppInventory` (Task 4): this class has `deinit { cancel() }`, and a nonisolated
+///   as `AppInventory`: this class has `deinit { cancel() }`, and a nonisolated
 ///   `deinit` may not call a `@MainActor` method. It is safe because `Timer` is only ever
 ///   scheduled and invalidated from the main thread — `schedule`/`cancel` are called from
 ///   `AppDelegate`, which is itself `@MainActor`, and the fire closure below hops back to

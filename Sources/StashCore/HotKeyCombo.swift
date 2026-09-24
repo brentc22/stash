@@ -54,7 +54,7 @@ public struct HotKeyCombo: Equatable, Sendable {
         isValid ? nil : "Kies een combinatie met ⌘, ⌥ of ⌃ erbij — anders werkt die toets nergens meer."
     }
 
-    /// Modifiers in the fixed order ⌘⌥⌃⇧, then the key. The order is fixed by the brief
+    /// Modifiers in the fixed order ⌘⌥⌃⇧, then the key. The order is fixed
     /// so the same combination always renders identically, whatever order it was typed in.
     public var displayString: String {
         Self.modifierString(for: modifierFlags) + Self.keyName(for: keyCode)
