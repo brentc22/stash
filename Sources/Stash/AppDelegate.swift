@@ -73,6 +73,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Same toggle as a click on the arrow — one path, no second implementation.
         syncHotKeyRegistration()
+
+        Updater.shared.usesAccessibility = { [weak self] in self?.preferences.showOnlyMenuBarApps ?? false }
+        Updater.shared.start()
+        showSettingsIfUpdateLostTrust()
+    }
+
+    /// An update swaps in a new ad-hoc signed binary, and macOS ties the Accessibility
+    /// grant to the old one's hash. Hiding keeps working, but the menu bar filter silently
+    /// falls back to the full list — so right after an update that lost the grant, open
+    /// the Algemeen tab, where `permissionHelp` explains the stale row and links to
+    /// System Settings. The swap script relaunches with `--after-update`.
+    private func showSettingsIfUpdateLostTrust() {
+        guard CommandLine.arguments.contains("--after-update"),
+              preferences.showOnlyMenuBarApps, !MenuBarOwners.isTrusted else { return }
+        settingsModel.selectedTab = .general
+        showSettings()
     }
 
     /// The Accessibility permission is granted in System Settings, in another process,

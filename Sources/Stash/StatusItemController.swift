@@ -62,6 +62,13 @@ final class StatusItemController: NSObject {
     private func showMenu() {
         guard let button = item.button else { return }
         let menu = NSMenu()
+        if let version = Updater.shared.available?.version {
+            let update = menu.addItem(withTitle: "Update beschikbaar: Stash \(version)…",
+                                      action: #selector(updatePressed), keyEquivalent: "")
+            update.target = self
+            update.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+            menu.addItem(.separator())
+        }
         menu.addItem(withTitle: "Instellingen…", action: #selector(settingsPressed), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
@@ -75,5 +82,6 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func settingsPressed() { onSettings() }
+    @objc private func updatePressed() { Updater.shared.offerAvailable() }
     @objc private func quitPressed() { onQuit() }
 }

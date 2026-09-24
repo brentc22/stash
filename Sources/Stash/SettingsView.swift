@@ -21,6 +21,9 @@ final class SettingsModel: ObservableObject {
     /// Which of Alles/Verborgen/Altijd the Apps tab shows. A view concern like `query`:
     /// never persisted, never read by `refresh()`.
     @Published var listFilter: AppListFilter = .all
+    /// Which tab the window shows. Set to `.general` after an update that lost the
+    /// Accessibility grant, so the explanation is the first thing on screen.
+    @Published var selectedTab: SettingsTab = .apps
     @Published var collapseDelay: CollapseDelay {
         didSet {
             preferences.collapseDelay = collapseDelay
@@ -202,16 +205,20 @@ final class SettingsModel: ObservableObject {
     }
 }
 
+enum SettingsTab: Hashable { case apps, general }
+
 struct SettingsView: View {
 
     @ObservedObject var model: SettingsModel
 
     var body: some View {
-        TabView {
+        TabView(selection: $model.selectedTab) {
             AppsTab(model: model)
                 .tabItem { Text("Apps") }
+                .tag(SettingsTab.apps)
             GeneralTab(model: model)
                 .tabItem { Text("Algemeen") }
+                .tag(SettingsTab.general)
         }
         .frame(width: 460, height: 640)
     }
@@ -424,6 +431,7 @@ struct VisibilityPicker: View {
 struct GeneralTab: View {
 
     @ObservedObject var model: SettingsModel
+    @ObservedObject var updater = Updater.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -432,6 +440,8 @@ struct GeneralTab: View {
             behaviourSection
             Divider()
             accessibilitySection
+            Divider()
+            updatesSection
             Spacer(minLength: 0)
             Divider()
             footer
@@ -562,6 +572,44 @@ struct GeneralTab: View {
             RoundedRectangle(cornerRadius: 7)
                 .fill(Color.accentColor.opacity(0.10))
         )
+    }
+
+    private var updatesSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("UPDATES")
+            Toggle("Automatisch controleren op updates", isOn: $updater.automaticallyChecks)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 7) {
+                Text(updateStatus)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                if let version = updater.available?.version {
+                    Button("Stash \(version) installeren…") { updater.offerAvailable() }
+                        .controlSize(.small)
+                } else {
+                    Button("Nu controleren") { updater.check(userInitiated: true) }
+                        .controlSize(.small)
+                        .disabled(updater.isBusy)
+                }
+            }
+        }
+    }
+
+    /// "Versie 0.1.0 · laatst gecontroleerd vandaag om 15:42", or the version that is waiting.
+    private var updateStatus: String {
+        if updater.isBusy { return "Versie \(Self.version) · controleren…" }
+        if let version = updater.available?.version {
+            return "Versie \(Self.version) · Stash \(version) is beschikbaar"
+        }
+        guard let last = updater.lastCheck else { return "Versie \(Self.version) · nog niet gecontroleerd" }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "nl_BE")
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        formatter.doesRelativeDateFormatting = true
+        return "Versie \(Self.version) · laatst gecontroleerd \(formatter.string(from: last))"
     }
 
     private var footer: some View {
