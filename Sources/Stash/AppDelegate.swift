@@ -24,11 +24,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsModel: SettingsModel!
     private var hotKey: GlobalHotKey!
     private var state: BarState = .collapsed
-    /// The allowlist last handed to `restriction`, or `nil` when none is known to be
-    /// active. `rebuild()` fires on every change to the running apps — most of them
-    /// helper processes that never reach the allowlist — and each `apply` builds a new
-    /// system assertion, so an identical list is skipped.
-    private var appliedAllowlist: Set<String>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Single-instance guard: `make install` replaces the bundle on disk, but a
@@ -101,12 +96,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             collapseTimer.cancel()
         }
-        rebuild()
+        rebuild(force: true)
     }
 
-    /// Recomputes the allowlist and applies it. Called on every toggle, every app
-    /// launch, and after every change to the hidden set.
-    func rebuild() {
+    /// Recomputes the allowlist and applies it. Called on every toggle, every change to
+    /// the running apps, and after every change to the hidden set. An unchanged
+    /// allowlist is skipped unless `force` — see `MenuBarRestriction.apply`.
+    func rebuild(force: Bool = false) {
         guard restriction.isAvailable else { return }
         let allowed = Allowlist.compute(
             running: inventory.runningBundleIDs,
@@ -115,15 +111,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             state: state,
             ownBundleID: ownBundleID
         )
-        guard allowed != appliedAllowlist else { return }
-        appliedAllowlist = allowed
-        restriction.apply(allowing: allowed) { [weak self] error in
+        restriction.apply(allowing: allowed, force: force) { [weak self] error in
             guard let error else { return }
             NSLog("Stash: kon restrictie niet toepassen: \(error)")
             DispatchQueue.main.async {
                 guard let self else { return }
-                // Unknown what is active now, so the next rebuild must apply again.
-                self.appliedAllowlist = nil
                 self.statusItem.render(state: self.state, available: false)
             }
         }

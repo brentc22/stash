@@ -39,7 +39,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
     -addext "basicConstraints=critical,CA:false" \
     -addext "keyUsage=critical,digitalSignature" \
     -addext "extendedKeyUsage=critical,codeSigning" \
-    >/dev/null 2>&1
+    >/dev/null 2>"$TMP/openssl.log" || { cat "$TMP/openssl.log" >&2; exit 1; }
 
 # macOS `security` cannot read PKCS#12 files written with OpenSSL 3's default
 # algorithms, so ask for the older ones explicitly. Without this the import
@@ -49,9 +49,12 @@ openssl pkcs12 -export \
     -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -out "$TMP/cert.p12" \
     -passout pass:stash -name "$NAME" \
     -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 \
-    >/dev/null 2>&1
+    >/dev/null 2>"$TMP/openssl.log" || { cat "$TMP/openssl.log" >&2; exit 1; }
 
-security import "$TMP/cert.p12" -k "$KEYCHAIN" -P stash -T /usr/bin/codesign -A
+# Only codesign may use the key without a prompt. Not `-A` (any app): the key is what
+# makes a binary count as Stash for the Accessibility grant, so a process that could
+# sign with it silently could inherit that grant.
+security import "$TMP/cert.p12" -k "$KEYCHAIN" -P stash -T /usr/bin/codesign
 
 echo "created code signing identity \"$NAME\""
 echo "run 'make install' to sign Stash with it"

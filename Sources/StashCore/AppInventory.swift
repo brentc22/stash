@@ -61,9 +61,10 @@ extension Array where Element == KnownApp {
 /// after we have passed that list to the menu bar, and it is not in the list, so it silently
 /// vanishes from the menu bar. The app looks like it randomly eats programs. Every launch
 /// must therefore trigger a recomputation.
-/// - Note: Marked `@unchecked Sendable` because all mutations occur on the main thread:
-///   observers deliver on `.main`, and the app accesses this class only from the main thread
-///   (status item, app delegate, settings view).
+/// - Note: Marked `@unchecked Sendable` because all mutations occur on the main thread. The
+///   KVO callback in `start()` arrives on whichever thread changed `runningApplications`, so
+///   it only hops to main and touches nothing itself; the app accesses this class only from
+///   the main thread (status item, app delegate, settings view).
 public final class AppInventory: @unchecked Sendable {
 
     private static let namesKey = "knownAppNames"
@@ -89,7 +90,11 @@ public final class AppInventory: @unchecked Sendable {
     /// 24-09-2026: launching Portside fired the KVO change, not the notification.
     public func start() {
         observation = NSWorkspace.shared.observe(\.runningApplications) { [weak self] _, _ in
-            DispatchQueue.main.async { self?.refresh() }
+            DispatchQueue.main.async {
+                // A change queued before `stop()` must not still fire after it.
+                guard let self, self.observation != nil else { return }
+                self.refresh()
+            }
         }
     }
 
@@ -120,15 +125,15 @@ public final class AppInventory: @unchecked Sendable {
     }
 
     public var knownApps: [KnownApp] {
-        let running = runningBundleIDs
-        let ids = Set(names.keys).union(running)
-        return ids
-            .map { KnownApp(id: $0, name: names[$0] ?? liveName($0) ?? $0, isRunning: running.contains($0)) }
+        // One pass over the running apps for both the running set and their live names.
+        var live: [String: String] = [:]
+        for app in eligibleApplications() {
+            guard let id = app.bundleIdentifier else { continue }
+            live[id] = app.localizedName ?? id
+        }
+        return Set(names.keys).union(live.keys)
+            .map { KnownApp(id: $0, name: names[$0] ?? live[$0] ?? $0, isRunning: live[$0] != nil) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-    }
-
-    private func liveName(_ bundleID: String) -> String? {
-        NSWorkspace.shared.runningApplications.first { $0.bundleIdentifier == bundleID }?.localizedName
     }
 
     public func icon(for bundleID: String) -> NSImage? {

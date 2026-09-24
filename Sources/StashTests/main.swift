@@ -561,4 +561,16 @@ T.test("de wens overleeft een geweigerde toestemming in UserDefaults") {
     }
 }
 
+T.test("een expliciete keuze ruimt een app op die in beide sets stond") {
+    withTestDefaults { defaults in
+        defaults.set(["com.a"], forKey: "hiddenBundleIDs")
+        defaults.set(["com.a"], forKey: "alwaysHiddenBundleIDs")
+        HiddenSet(defaults: defaults).setVisibility(.alwaysHidden, for: "com.a")
+
+        let reloaded = HiddenSet(defaults: defaults)
+        T.equal(reloaded.bundleIDs, [], "uit de gewone verborgen set:")
+        T.equal(reloaded.alwaysHiddenBundleIDs, ["com.a"])
+    }
+}
+
 T.finish()

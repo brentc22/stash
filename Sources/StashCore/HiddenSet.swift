@@ -90,7 +90,7 @@ public final class HiddenSet {
     }
 
     public func setVisibility(_ visibility: AppVisibility, for bundleID: String) {
-        guard self.visibility(for: bundleID) != visibility else { return }
+        let before = (storage, alwaysHiddenStorage)
         switch visibility {
         case .visible:
             storage.remove(bundleID)
@@ -102,6 +102,7 @@ public final class HiddenSet {
             alwaysHiddenStorage.insert(bundleID)
             storage.remove(bundleID)
         }
+        guard (storage, alwaysHiddenStorage) != before else { return }
         persist()
     }
 
