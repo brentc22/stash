@@ -573,4 +573,155 @@ T.test("een expliciete keuze ruimt een app op die in beide sets stond") {
     }
 }
 
+// MARK: - Updates
+
+let updateTmp = URL(fileURLWithPath: NSTemporaryDirectory())
+    .appendingPathComponent("stash-update-tests-\(UUID().uuidString)").resolvingSymlinksInPath()
+
+T.test("versies: tags parsen en numeriek vergelijken") {
+    T.equal(AppVersion("v0.2.0")?.description, "0.2.0")
+    T.equal(AppVersion("0.2")?.description, "0.2.0", "ontbrekende delen tellen als 0:")
+    T.expect(AppVersion("1.10.0")! > AppVersion("1.9.9")!, "1.10.0 > 1.9.9")
+    T.expect(AppVersion("0.2.0")! > AppVersion("0.1.9")!, "0.2.0 > 0.1.9")
+    T.expect(AppVersion("0.1.0") == AppVersion("v0.1"), "0.1.0 == v0.1")
+    T.equal(AppVersion("2.0.0-beta.1")?.description, "2.0.0", "pre-release-suffix valt weg:")
+}
+
+T.test("versies: wat geen versie is wordt geweigerd") {
+    T.expect(AppVersion("latest") == nil, "latest")
+    T.expect(AppVersion("1.2.3.4") == nil, "vier delen")
+    T.expect(AppVersion("1..2") == nil, "leeg deel")
+    T.expect(AppVersion("") == nil, "leeg")
+}
+
+func releaseJSON(tag: String, prerelease: Bool = false, assets: [String] = ["Stash-0.2.0.zip"]) -> Data {
+    let list = assets.map { #"{"name":"\#($0)","browser_download_url":"https://example.com/\#($0)"}"# }
+    return Data(#"""
+    {"tag_name":"\#(tag)","html_url":"https://github.com/brentc22/stash/releases/tag/\#(tag)",
+     "body":"- Nieuw icoon","draft":false,"prerelease":\#(prerelease),"assets":[\#(list.joined(separator: ","))],
+     "author":{"login":"brentc22"}}
+    """#.utf8)
+}
+
+T.test("release: GitHubs releases/latest decoderen en de zip vinden") {
+    do {
+        let release = try Release.decode(releaseJSON(tag: "v0.2.0", assets: ["checksums.txt", "Stash-0.2.0.zip"]))
+        T.equal(release.version, AppVersion("0.2.0"))
+        T.equal(release.body, "- Nieuw icoon")
+        T.equal(release.zipURL(appName: "Stash")?.lastPathComponent, "Stash-0.2.0.zip")
+        T.expect(release.zipURL(appName: "Portside") == nil, "de zip van een andere app is niet de onze")
+    } catch {
+        T.expect(false, "decode gooide \(error)")
+    }
+}
+
+T.test("updatebeleid: alleen nieuwere, niet-overgeslagen, definitieve releases") {
+    do {
+        let current = AppVersion("0.1.0")!
+        let newer = try Release.decode(releaseJSON(tag: "v0.2.0"))
+        let same = try Release.decode(releaseJSON(tag: "v0.1.0"))
+        let beta = try Release.decode(releaseJSON(tag: "v0.3.0", prerelease: true))
+        T.expect(UpdatePolicy.shouldOffer(newer, current: current, skipped: nil, userInitiated: false), "nieuwer")
+        T.expect(!UpdatePolicy.shouldOffer(same, current: current, skipped: nil, userInitiated: true), "zelfde versie")
+        T.expect(!UpdatePolicy.shouldOffer(beta, current: current, skipped: nil, userInitiated: true), "prerelease")
+        T.expect(!UpdatePolicy.shouldOffer(newer, current: current, skipped: "0.2.0", userInitiated: false),
+                 "overgeslagen versie blijft stil bij automatische checks")
+        T.expect(UpdatePolicy.shouldOffer(newer, current: current, skipped: "0.2.0", userInitiated: true),
+                 "maar verschijnt als de gebruiker zelf controleert")
+        T.expect(UpdatePolicy.shouldOffer(newer, current: current, skipped: "0.1.5", userInitiated: false),
+                 "een oudere overgeslagen versie verbergt geen nieuwere")
+    } catch {
+        T.expect(false, "decode gooide \(error)")
+    }
+}
+
+T.test("updatebeleid: hoogstens één keer per dag controleren") {
+    let now = Date()
+    T.expect(UpdatePolicy.isCheckDue(lastCheck: nil, now: now), "nog nooit gecontroleerd")
+    T.expect(!UpdatePolicy.isCheckDue(lastCheck: now.addingTimeInterval(-3600), now: now), "een uur geleden")
+    T.expect(UpdatePolicy.isCheckDue(lastCheck: now.addingTimeInterval(-25 * 3600), now: now), "25 uur geleden")
+}
+
+/// Builds a signed fake app and zips it the way a release zip is made.
+func fakeRelease(in dir: URL, bundleID: String = "com.brentc22.Stash", version: String = "0.2.0",
+                 tamper: Bool = false) throws -> URL {
+    let fm = FileManager.default
+    try? fm.removeItem(at: dir)
+    let app = dir.appendingPathComponent("build/Stash.app")
+    try fm.createDirectory(at: app.appendingPathComponent("Contents/MacOS"), withIntermediateDirectories: true)
+    try fm.copyItem(atPath: "/usr/bin/true", toPath: app.appendingPathComponent("Contents/MacOS/Stash").path)
+    let info: NSDictionary = ["CFBundleIdentifier": bundleID, "CFBundleShortVersionString": version,
+                              "CFBundleExecutable": "Stash", "CFBundlePackageType": "APPL"]
+    info.write(to: app.appendingPathComponent("Contents/Info.plist"), atomically: true)
+    try UpdateInstaller.run("/usr/bin/codesign", ["--force", "--sign", "-", app.path])
+    if tamper {
+        try Data("tampered".utf8).write(to: app.appendingPathComponent("Contents/MacOS/Stash"))
+    }
+    let zip = dir.appendingPathComponent("Stash.zip")
+    try UpdateInstaller.run("/usr/bin/ditto", ["-c", "-k", "--keepParent", app.path, zip.path])
+    return zip
+}
+
+let updateDir = updateTmp.appendingPathComponent("update")
+
+func prepareError(_ zip: () throws -> URL) -> UpdateError? {
+    do {
+        _ = try UpdateInstaller.prepare(zip: try zip(), in: updateDir, bundleID: "com.brentc22.Stash",
+                                        version: AppVersion("0.2.0")!)
+        return nil
+    } catch { return error as? UpdateError }
+}
+
+T.test("installer: ondertekende app met juiste id en versie wordt aanvaard") {
+    do {
+        let zip = try fakeRelease(in: updateDir)
+        let app = try UpdateInstaller.prepare(zip: zip, in: updateDir, bundleID: "com.brentc22.Stash",
+                                              version: AppVersion("0.2.0")!)
+        T.equal(app.lastPathComponent, "Stash.app")
+    } catch {
+        T.expect(false, "prepare gooide \(error)")
+    }
+}
+
+T.test("installer: andere app, andere versie of kapotte handtekening wordt geweigerd") {
+    T.equal(prepareError { try fakeRelease(in: updateDir, bundleID: "com.example.Evil") },
+            .wrongApp(bundleID: "com.example.Evil"))
+    T.equal(prepareError { try fakeRelease(in: updateDir, version: "0.1.9") },
+            .wrongVersion(found: "0.1.9", expected: "0.2.0"))
+    let tampered = prepareError { try fakeRelease(in: updateDir, tamper: true) }
+    if case .invalidSignature = tampered { T.expect(true, "") } else { T.expect(false, "kreeg \(String(describing: tampered))") }
+}
+
+T.test("installer: swapscript vervangt de app zodra het oude proces weg is") {
+    do {
+        let fm = FileManager.default
+        let dir = updateTmp.appendingPathComponent("swap it's here")  // a quote in the path, on purpose
+        try? fm.removeItem(at: dir)
+        let installed = dir.appendingPathComponent("Applications/Stash.app")
+        let fresh = dir.appendingPathComponent("work/Stash.app")
+        try fm.createDirectory(at: installed, withIntermediateDirectories: true)
+        try fm.createDirectory(at: fresh, withIntermediateDirectories: true)
+        try Data("old".utf8).write(to: installed.appendingPathComponent("marker"))
+        try Data("new".utf8).write(to: fresh.appendingPathComponent("marker"))
+
+        let finished = Process()
+        finished.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try finished.run()
+        finished.waitUntilExit()
+        let script = UpdateInstaller.swapScript(pid: finished.processIdentifier, newApp: fresh,
+                                                destination: installed, relaunch: false)
+        try UpdateInstaller.run("/bin/sh", ["-c", script])
+
+        T.equal(try String(contentsOf: installed.appendingPathComponent("marker"), encoding: .utf8), "new")
+        T.expect(!fm.fileExists(atPath: fresh.path), "nieuwe kopie verplaatst, niet gekopieerd")
+        T.expect(!fm.fileExists(atPath: dir.appendingPathComponent("work/previous.app").path), "backup opgeruimd")
+        T.expect(UpdateInstaller.swapScript(pid: 1, newApp: fresh, destination: installed)
+                    .contains("--args --after-update"), "herstart meldt dat er net een update was")
+    } catch {
+        T.expect(false, "gooide \(error)")
+    }
+}
+
+try? FileManager.default.removeItem(at: updateTmp)
+
 T.finish()

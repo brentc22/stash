@@ -176,8 +176,8 @@ the three states.
 **Algemeen** holds everything that is not per-app: a recordable global shortcut (click
 the field, press the combination; Escape cancels, and a combination without ⌘/⌥/⌃ is
 refused), an auto-collapse delay, a "Starten bij inloggen" (start at login) toggle backed
-by `SMAppService`, and the optional "Alleen apps met een menubalk-icoon" filter (see
-below).
+by `SMAppService`, the optional "Alleen apps met een menubalk-icoon" filter (see
+below), and the update settings (see [Updates](#updates)).
 
 <p>
   <img src="docs/images/settings-window.png" alt="Stash's settings window, listing known apps with checkboxes plus auto-collapse and login-item controls" width="420">
@@ -210,9 +210,34 @@ every build, which changes that signature. Concretely observed on this machine: 
 Settings → Privacy & Security → Accessibility kept showing "Stash" toggled on from an
 earlier build, but the freshly reinstalled binary still read `AXIsProcessTrusted() ==
 false` until the toggle was switched off and back on for that new binary. Expect to
-re-grant Accessibility after every `make install` during development; a binary installed
-once via a Release build and left alone should not have this problem, since nothing
-re-signs it again.
+re-grant Accessibility after every `make install` during development. The same goes for
+an in-app update: a new release is a new ad-hoc signed binary, so the grant has to be
+given again (see below).
+
+### Updates
+
+Stash checks GitHub Releases once a day for a newer version — the only network request it
+makes. When there is one, it shows the release notes with three buttons: "Installeren en
+herstarten" (download, check and swap the app, then relaunch), "Later", and "Deze versie
+overslaan" (stay quiet about this version until you check yourself). A waiting update also
+shows up at the top of the right-click menu as "Update beschikbaar: Stash x.y.z…".
+
+On the Algemeen tab, under **Updates**: "Automatisch controleren op updates" (on by default)
+turns the daily check off, and "Nu controleren" checks right away. The line next to it shows
+the installed version and when Stash last checked.
+
+Before swapping anything in, Stash checks that the download is `com.brentc22.Stash`, that it
+is the version the release promised, and that its code signature is intact
+(`codesign --verify --deep --strict`). If any of that fails, or `/Applications` isn't
+writable, it offers the download page instead.
+
+Because the new binary is ad-hoc signed, macOS no longer applies the old Accessibility
+grant to it. That only matters when the menu bar filter is on. In that case the update
+dialog says so in advance, and right after the relaunch Stash opens the Algemeen tab with the
+instructions for granting it again.
+
+Installed through Homebrew? After an in-app update, `brew` still lists the old version until
+the next `brew upgrade`. That is harmless.
 
 ## Uninstall
 
