@@ -9,10 +9,10 @@ public enum CollapseDelay: Int, CaseIterable, Sendable {
 
     public var label: String {
         switch self {
-        case .never:   return "Nooit"
-        case .after5:  return "Na 5 seconden"
-        case .after10: return "Na 10 seconden"
-        case .after30: return "Na 30 seconden"
+        case .never:   return "Never"
+        case .after5:  return "After 5 seconds"
+        case .after10: return "After 10 seconds"
+        case .after30: return "After 30 seconds"
         }
     }
 }
@@ -52,7 +52,7 @@ extension Preferences {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                NSLog("Stash: kon login item niet wijzigen: \(error)")
+                NSLog("Stash: could not change login item: \(error)")
             }
         }
     }

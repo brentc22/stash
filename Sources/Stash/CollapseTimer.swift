@@ -1,7 +1,7 @@
 import Foundation
 import StashCore
 
-/// Klapt de balk vanzelf weer in. Eén timer, altijd eerst geannuleerd voor een nieuwe.
+/// Collapses the bar again on its own. One timer, always cancelled before a new one.
 /// - Note: Marked `@unchecked Sendable` rather than `@MainActor`, on the same precedent
 ///   as `AppInventory` (Task 4): this class has `deinit { cancel() }`, and a nonisolated
 ///   `deinit` may not call a `@MainActor` method. It is safe because `Timer` is only ever

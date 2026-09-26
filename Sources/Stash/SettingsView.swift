@@ -91,9 +91,9 @@ struct SettingsView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Verbergen").font(.headline)
-            Text("Vink aan wat achter het pijltje verdwijnt. Een app met meerdere iconen "
-                 + "gaat als geheel weg — dat is een beperking van macOS, niet van Stash.")
+            Text("Hide").font(.headline)
+            Text("Check what disappears behind the arrow. An app with several icons "
+                 + "is hidden as a whole — that is a macOS limitation, not a Stash one.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -115,7 +115,7 @@ struct SettingsView: View {
                     }
                     Text(app.name)
                     if !app.isRunning {
-                        Text("niet actief").font(.caption).foregroundStyle(.tertiary)
+                        Text("not running").font(.caption).foregroundStyle(.tertiary)
                     }
                 }
             }
@@ -127,7 +127,7 @@ struct SettingsView: View {
     private var footer: some View {
         VStack(spacing: 12) {
             HStack {
-                Text("Automatisch inklappen")
+                Text("Auto-collapse")
                 Spacer()
                 Picker("", selection: $model.collapseDelay) {
                     ForEach(CollapseDelay.allCases, id: \.rawValue) { delay in
@@ -137,7 +137,7 @@ struct SettingsView: View {
                 .labelsHidden()
                 .frame(width: 180)
             }
-            Toggle("Starten bij inloggen", isOn: $model.launchAtLogin)
+            Toggle("Launch at login", isOn: $model.launchAtLogin)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
