@@ -102,9 +102,6 @@ These are limits of the underlying facility, not choices Stash made:
 - **No second bar or panel showing the hidden icons.** The technique that made that kind
   of UI possible — enumerating and repositioning each item's own window — doesn't exist
   on macOS 27.
-- **The UI is in Dutch.** ("Verbergen" = Hide, "Automatisch inklappen" = Auto-collapse,
-  "Starten bij inloggen" = Start at login.) It isn't localized yet; the labels are short
-  enough to follow from the screenshots.
 - **Private framework.** Any macOS update can break Stash, and an app built on this can
   never ship on the Mac App Store. That is a deliberate trade-off: the supported
   alternative is having no control over the menu bar at all.
@@ -165,9 +162,9 @@ those measurements ambiguous.
 
 ## Settings
 
-Right-click the arrow for "Instellingen…" (Settings): a checklist of every app Stash
-has seen running (apps not running right now are marked *niet actief*), an auto-collapse
-delay, and a "Starten bij inloggen" (start at login) toggle backed by `SMAppService`.
+Right-click the arrow for "Settings…": a checklist of every app Stash
+has seen running (apps not running right now are marked *not running*), an auto-collapse
+delay, and a "Launch at login" toggle backed by `SMAppService`.
 
 <p>
   <img src="docs/images/settings-window.png" alt="Stash's settings window, listing known apps with checkboxes plus auto-collapse and login-item controls" width="420">
@@ -175,11 +172,11 @@ delay, and a "Starten bij inloggen" (start at login) toggle backed by `SMAppServ
 
 ## Uninstall
 
-- **Turn off "Starten bij inloggen" in Settings before quitting**, if it was on. That
+- **Turn off "Launch at login" in Settings before quitting**, if it was on. That
   unregisters the `SMAppService` login item cleanly; quitting first without doing this
   leaves the login item registered, so macOS keeps launching Stash at login even after
   the app itself is gone.
-- **Quit Stash** — right-click the arrow and choose "Stash stoppen". This lifts the
+- **Quit Stash** — right-click the arrow and choose "Quit Stash". This lifts the
   assessment-mode assertion and hands every hidden icon back before the app disappears.
 - **Remove the app**: `rm -rf /Applications/Stash.app`.
 - **Remove its saved settings**: `rm -f ~/Library/Preferences/com.brentc22.Stash.plist`.

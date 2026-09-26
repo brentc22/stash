@@ -245,12 +245,12 @@ T.test("CollapseDelay rondreist door UserDefaults") {
     }
 }
 
-T.test("alle vertragingen hebben een Nederlands label") {
+T.test("every delay has an English label") {
     for delay in CollapseDelay.allCases {
-        T.expect(!delay.label.isEmpty, "\(delay) mist een label")
+        T.expect(!delay.label.isEmpty, "\(delay) is missing a label")
     }
-    T.equal(CollapseDelay.never.label, "Nooit")
-    T.equal(CollapseDelay.after10.label, "Na 10 seconden")
+    T.equal(CollapseDelay.never.label, "Never")
+    T.equal(CollapseDelay.after10.label, "After 10 seconds")
 }
 
 T.finish()

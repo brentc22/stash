@@ -92,7 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         restriction.apply(allowing: allowed) { [weak self] error in
             guard let error else { return }
-            NSLog("Stash: kon restrictie niet toepassen: \(error)")
+            NSLog("Stash: could not apply restriction: \(error)")
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.statusItem.render(state: self.state, available: false)
