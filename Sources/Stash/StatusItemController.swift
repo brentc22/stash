@@ -15,15 +15,10 @@ final class StatusItemController: NSObject {
     private let onToggle: () -> Void
     private let onSettings: () -> Void
     private let onQuit: () -> Void
-    private let onHover: () -> Void
     private let onPresentationToggle: () -> Void
     /// Read when the menu opens, so the checkmark is never stale.
     private let presentationState: () -> (manual: Bool, active: Bool)
-    private var hoverTimer: Timer?
-
-    /// How long the pointer must rest on the arrow before `onHover` fires. Long enough
-    /// that sweeping across the bar to another item does not flash everything open.
-    private static let hoverDwell: TimeInterval = 0.35
+    private let hoverWatcher: HoverWatcher
 
     init(onToggle: @escaping () -> Void,
          onSettings: @escaping () -> Void,
@@ -34,33 +29,16 @@ final class StatusItemController: NSObject {
         self.onToggle = onToggle
         self.onSettings = onSettings
         self.onQuit = onQuit
-        self.onHover = onHover
         self.onPresentationToggle = onPresentationToggle
         self.presentationState = presentationState
+        self.hoverWatcher = HoverWatcher(onHover: onHover)
         self.item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
         item.button?.target = self
         item.button?.action = #selector(buttonPressed)
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        if let button = item.button {
-            button.addTrackingArea(NSTrackingArea(rect: .zero,
-                                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                                                  owner: self, userInfo: nil))
-        }
-    }
-
-    // A tracking area's owner receives these; they are not overrides of anything.
-    @objc func mouseEntered(with event: NSEvent) {
-        hoverTimer?.invalidate()
-        hoverTimer = Timer.scheduledTimer(withTimeInterval: Self.hoverDwell, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.onHover() }
-        }
-    }
-
-    @objc func mouseExited(with event: NSEvent) {
-        hoverTimer?.invalidate()
-        hoverTimer = nil
+        hoverWatcher.start()
     }
 
     func render(state: BarState, available: Bool, presenting: Bool = false) {
@@ -86,7 +64,7 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func buttonPressed() {
-        hoverTimer?.invalidate()
+        hoverWatcher.cancel()
         guard let event = NSApp.currentEvent else { onToggle(); return }
         if event.type == .rightMouseUp {
             showMenu()
