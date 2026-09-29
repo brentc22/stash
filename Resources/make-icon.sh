@@ -1,7 +1,10 @@
 #!/bin/zsh
 # Generates Resources/Stash.icns without any external design tools.
 #
-# Draws a chevron directly with NSBezierPath rather than compositing an SF Symbol:
+# The mark: a neon chevron on a dark body, swallowing coloured status items that
+# shrink and fade as they slide in — what Stash does to the menu bar.
+#
+# Draws the chevron directly with NSBezierPath rather than compositing an SF Symbol:
 # an early version tried `NSImage(systemSymbolName: "chevron.left")` tinted via
 # `NSColor.white.set()` before `.draw(in:)`, but a template symbol image drawn that
 # way outside of an NSImageView/NSButton context ignores the fill color and renders
@@ -15,93 +18,110 @@ mkdir -p "$DIR"
 cat > "$TMP/stash_icon.swift" <<'SWIFT'
 import AppKit
 
-let sizes = [16, 32, 64, 128, 256, 512, 1024]
-
 func rgb(_ hex: UInt32, _ a: CGFloat = 1) -> NSColor {
     NSColor(srgbRed: CGFloat(hex >> 16 & 0xFF) / 255, green: CGFloat(hex >> 8 & 0xFF) / 255,
             blue: CGFloat(hex & 0xFF) / 255, alpha: a)
 }
 
-for size in sizes {
+func render(_ size: Int) -> Data? {
     let s = CGFloat(size)
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8,
                                samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    defer { NSGraphicsContext.restoreGraphicsState() }
 
-    // macOS icon grid: 824/1024 body, so Stash sits at the same size as system icons.
+    // macOS icon grid: 824/1024 body.
     let inset = s * 100 / 1024
     let body = NSRect(x: inset, y: inset, width: s - 2 * inset, height: s - 2 * inset)
     let bodyPath = NSBezierPath(roundedRect: body, xRadius: s * 185 / 1024, yRadius: s * 185 / 1024)
+    let u = body.width   // unit: everything below is a fraction of the body
 
+    // Body: near-black indigo with a drop shadow.
     NSGraphicsContext.saveGraphicsState()
     let shadow = NSShadow()
-    shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+    shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
     shadow.shadowOffset = NSSize(width: 0, height: -s * 0.012)
     shadow.shadowBlurRadius = s * 0.03
     shadow.set()
-    rgb(0x10B8E8).setFill()
+    rgb(0x0E0B1F).setFill()
     bodyPath.fill()
     NSGraphicsContext.restoreGraphicsState()
-
-    // Mint into cyan into blue.
-    NSGradient(colors: [rgb(0x3BF0A8), rgb(0x12C2E9), rgb(0x3D5AFE)],
-               atLocations: [0, 0.5, 1], colorSpace: .sRGB)!
-        .draw(in: bodyPath, angle: -60)
+    NSGradient(colors: [rgb(0x241A4D), rgb(0x0B0916)], atLocations: [0, 1], colorSpace: .sRGB)!
+        .draw(in: bodyPath, angle: -90)
 
     NSGraphicsContext.saveGraphicsState()
     bodyPath.addClip()
-    let glowCenter = NSPoint(x: body.midX - body.width * 0.2, y: body.maxY)
-    NSGradient(colors: [NSColor.white.withAlphaComponent(0.3), NSColor.white.withAlphaComponent(0)])!
-        .draw(fromCenter: glowCenter, radius: 0, toCenter: glowCenter, radius: body.width * 0.8, options: [])
-    NSGraphicsContext.restoreGraphicsState()
 
-    // A frosted "menu bar" pill: the arrow on the left, colored status items
-    // on the right shrinking and fading as they tuck away behind it.
-    let pillW = body.width * 0.74, pillH = body.height * 0.3
-    let pill = NSRect(x: body.midX - pillW / 2, y: body.midY - pillH / 2, width: pillW, height: pillH)
-    let pillPath = NSBezierPath(roundedRect: pill, xRadius: pillH / 2, yRadius: pillH / 2)
-    NSGraphicsContext.saveGraphicsState()
-    let pillShadow = NSShadow()
-    pillShadow.shadowColor = rgb(0x0B2A6B, 0.35)
-    pillShadow.shadowOffset = NSSize(width: 0, height: -s * 0.012)
-    pillShadow.shadowBlurRadius = s * 0.03
-    pillShadow.set()
-    NSColor.white.withAlphaComponent(0.22).setFill()
-    pillPath.fill()
-    NSGraphicsContext.restoreGraphicsState()
-    NSColor.white.withAlphaComponent(0.5).setStroke()
-    pillPath.lineWidth = max(1, s * 0.004)
-    pillPath.stroke()
+    // The chevron's "mouth" sits left of centre; a warm glow spills out of it.
+    let tip = CGPoint(x: body.minX + u * 0.30, y: body.midY)
+    let glowC = CGPoint(x: tip.x + u * 0.08, y: tip.y)
+    NSGradient(colors: [rgb(0xFF3D7F, 0.55), rgb(0xFF3D7F, 0.12), rgb(0xFF3D7F, 0)],
+               atLocations: [0, 0.45, 1], colorSpace: .sRGB)!
+        .draw(fromCenter: glowC, radius: 0, toCenter: glowC, radius: u * 0.55, options: [])
 
-    // Chevron drawn by hand (see the note at the top about SF Symbols).
-    let arm = pillH * 0.26
-    let tip = CGPoint(x: pill.minX + pillH * 0.42, y: pill.midY)
-    let chevron = NSBezierPath()
-    chevron.lineWidth = pillH * 0.13
-    chevron.lineCapStyle = .round
-    chevron.lineJoinStyle = .round
-    chevron.move(to: CGPoint(x: tip.x + arm, y: tip.y + arm))
-    chevron.line(to: tip)
-    chevron.line(to: CGPoint(x: tip.x + arm, y: tip.y - arm))
-    NSColor.white.setStroke()
-    chevron.stroke()
-
-    let items: [(UInt32, CGFloat, CGFloat)] = [(0xFFD23F, 1.0, 1.0), (0xFF4F8B, 0.8, 1.0), (0xB15CFF, 0.6, 1.0)]
-    var x = pill.minX + pillH * 1.05
-    for (hex, scale, alpha) in items {
-        let d = pillH * 0.4 * scale
-        let r = NSRect(x: x, y: pill.midY - d / 2, width: d, height: d)
+    // Status items being swallowed: coloured tiles that shrink, fade and trail
+    // motion streaks as they slide into the chevron.
+    let tiles: [(UInt32, CGFloat, CGFloat)] = [   // colour, x (fraction of u), size (fraction of u)
+        (0x3BF0A8, 0.80, 0.135), (0xFFD23F, 0.60, 0.105), (0x4FA8FF, 0.445, 0.075),
+    ]
+    for (i, (hex, fx, fd)) in tiles.enumerated() {
+        let d = u * fd
+        let cx = body.minX + u * fx
+        let alpha: CGFloat = [1, 0.85, 0.6][i]
+        // streak behind it
+        let streak = NSRect(x: cx, y: tip.y - d * 0.28, width: u * 0.17, height: d * 0.56)
+        NSGradient(colors: [rgb(hex, 0.45 * alpha), rgb(hex, 0)])!
+            .draw(in: NSBezierPath(roundedRect: streak, xRadius: d * 0.28, yRadius: d * 0.28), angle: 0)
+        let r = NSRect(x: cx - d / 2, y: tip.y - d / 2, width: d, height: d)
+        NSGraphicsContext.saveGraphicsState()
+        let g = NSShadow(); g.shadowColor = rgb(hex, 0.8 * alpha); g.shadowBlurRadius = u * 0.035; g.set()
         rgb(hex, alpha).setFill()
         NSBezierPath(roundedRect: r, xRadius: d * 0.3, yRadius: d * 0.3).fill()
-        x += d + pillH * 0.16
+        NSGraphicsContext.restoreGraphicsState()
     }
 
+    // The chevron: bold, rounded, hot pink into orange, with a neon glow.
+    let arm = u * 0.20
+    let chevron = NSBezierPath()
+    chevron.lineWidth = u * 0.105
+    chevron.lineCapStyle = .round
+    chevron.lineJoinStyle = .round
+    chevron.move(to: CGPoint(x: tip.x + arm, y: tip.y + arm * 1.05))
+    chevron.line(to: tip)
+    chevron.line(to: CGPoint(x: tip.x + arm, y: tip.y - arm * 1.05))
+    let stroked = NSBezierPath()
+    if let cg = chevron.cgPath.copy(strokingWithWidth: chevron.lineWidth, lineCap: .round, lineJoin: .round, miterLimit: 10) as CGPath? {
+        stroked.append(NSBezierPath(cgPath: cg))
+    }
+    NSGraphicsContext.saveGraphicsState()
+    let neon = NSShadow(); neon.shadowColor = rgb(0xFF3D7F, 0.9); neon.shadowBlurRadius = u * 0.06; neon.set()
+    rgb(0xFF3D7F).setFill(); stroked.fill()
     NSGraphicsContext.restoreGraphicsState()
-    guard let png = rep.representation(using: .png, properties: [:]) else { continue }
-    let path2 = CommandLine.arguments[1] + "/icon_\(size)x\(size).png"
-    try? png.write(to: URL(fileURLWithPath: path2))
+    NSGradient(colors: [rgb(0xFFA63D), rgb(0xFF3D7F), rgb(0xC03DFF)], atLocations: [0, 0.45, 1], colorSpace: .sRGB)!
+        .draw(in: stroked, angle: -90)
+    // specular highlight on the upper arm
+    NSGraphicsContext.saveGraphicsState()
+    stroked.addClip()
+    NSGradient(colors: [rgb(0xFFFFFF, 0.22), rgb(0xFFFFFF, 0)])!
+        .draw(in: NSRect(x: tip.x - u * 0.06, y: tip.y, width: arm + u * 0.12, height: arm * 1.2), angle: -90)
+    NSGraphicsContext.restoreGraphicsState()
+
+    // Top sheen + hairline rim.
+    NSGradient(colors: [rgb(0xFFFFFF, 0.10), rgb(0xFFFFFF, 0)])!
+        .draw(in: NSRect(x: body.minX, y: body.midY, width: u, height: u / 2), angle: -90)
+    NSGraphicsContext.restoreGraphicsState()
+    rgb(0xFFFFFF, 0.12).setStroke()
+    bodyPath.lineWidth = max(1, s * 0.004)
+    bodyPath.stroke()
+
+    return rep.representation(using: .png, properties: [:])
+}
+
+for size in [16, 32, 64, 128, 256, 512, 1024] {
+    guard let png = render(size) else { continue }
+    try? png.write(to: URL(fileURLWithPath: CommandLine.arguments[1] + "/icon_\(size)x\(size).png"))
 }
 SWIFT
 
