@@ -18,7 +18,7 @@ final class SettingsModel: ObservableObject {
     /// The search field's text. Purely a view concern — never persisted, never read by
     /// `refresh()` — so it's fine that it lives here instead of `Preferences`.
     @Published var query: String = ""
-    /// Which of Alles/Verborgen/Altijd the Apps tab shows. A view concern like `query`:
+    /// Which of All/Hidden/Always the Apps tab shows. A view concern like `query`:
     /// never persisted, never read by `refresh()`.
     @Published var listFilter: AppListFilter = .all
     /// Which tab the window shows. Set to `.general` after an update that lost the
@@ -29,6 +29,32 @@ final class SettingsModel: ObservableObject {
             preferences.collapseDelay = collapseDelay
         }
     }
+    @Published var revealOnHover: Bool {
+        didSet {
+            guard !isReloading else { return }
+            preferences.revealOnHover = revealOnHover
+            // Finding the arrow on screen goes through Accessibility — same permission,
+            // same one-time prompt as the menu bar filter.
+            if revealOnHover, !MenuBarOwners.isTrusted {
+                MenuBarOwners.requestTrust()
+            }
+            refreshTrust()
+            onChange()
+        }
+    }
+    @Published var wifiOnlyWhenDisconnected: Bool {
+        didSet {
+            preferences.wifiOnlyWhenDisconnected = wifiOnlyWhenDisconnected
+            onChange()
+        }
+    }
+    @Published var automaticPresentationMode: Bool {
+        didSet {
+            preferences.automaticPresentationMode = automaticPresentationMode
+            onChange()
+        }
+    }
+    @Published var showWhenActive: Set<String> = []
     @Published var launchAtLogin: Bool {
         didSet {
             guard !isReconcilingLaunchAtLogin else { return }
@@ -49,7 +75,7 @@ final class SettingsModel: ObservableObject {
     /// only ever changed through `setHotKey(_:)`, which refuses to show a combination the
     /// system did not actually hand us.
     @Published private(set) var hotKey: HotKeyCombo?
-    /// A Dutch line under the shortcut field — a refused combination or a failed
+    /// A line under the shortcut field — a refused combination or a failed
     /// registration. `nil` when there is nothing to say.
     @Published var hotKeyMessage: String?
     /// "Only show apps with a menu bar icon" — the user's *wish*, which survives a
@@ -104,6 +130,9 @@ final class SettingsModel: ObservableObject {
         self.onChange = onChange
         self.onHotKeyChanged = onHotKeyChanged
         self.collapseDelay = preferences.collapseDelay
+        self.revealOnHover = preferences.revealOnHover
+        self.wifiOnlyWhenDisconnected = preferences.wifiOnlyWhenDisconnected
+        self.automaticPresentationMode = preferences.automaticPresentationMode
         self.launchAtLogin = preferences.launchAtLogin
         self.showOnlyMenuBarApps = preferences.showOnlyMenuBarApps
         refresh()
@@ -117,10 +146,12 @@ final class SettingsModel: ObservableObject {
     func refresh() {
         apps = inventory.knownApps.filter { $0.id != ownBundleID }
         visibilities = Dictionary(uniqueKeysWithValues: apps.map { ($0.id, hidden.visibility(for: $0.id)) })
+        showWhenActive = hidden.showWhenActiveBundleIDs
         collapseDelay = preferences.collapseDelay
         launchAtLogin = preferences.launchAtLogin
         isReloading = true
         showOnlyMenuBarApps = preferences.showOnlyMenuBarApps
+        revealOnHover = preferences.revealOnHover
         isReloading = false
         // `refresh()` must reload everything that is persisted, or the window shows a
         // stale value the second time it is opened. `refreshTrust()` covers the
@@ -144,8 +175,8 @@ final class SettingsModel: ObservableObject {
     var isFilterActive: Bool { effectiveOwners != nil }
 
     /// Re-reads the Accessibility trust and, when the filter is both wanted and allowed,
-    /// re-runs the ~263 ms sweep. Called from `init`/`refresh()`, from the "Opnieuw
-    /// controleren" button, and — the case the old flow had no answer for — every time the
+    /// re-runs the ~263 ms sweep. Called from `init`/`refresh()`, from the "Check
+    /// Again" button, and — the case the old flow had no answer for — every time the
     /// app becomes active again, which is the moment the user comes back from System
     /// Settings. Deliberately does not sweep when the filter is not wanted: the sweep is
     /// expensive and its result would go unused.
@@ -171,6 +202,12 @@ final class SettingsModel: ObservableObject {
         onChange()
     }
 
+    func setShowWhenActive(_ on: Bool, for bundleID: String) {
+        hidden.setShowWhenActive(on, for: bundleID)
+        showWhenActive = hidden.showWhenActiveBundleIDs
+        onChange()
+    }
+
     func icon(for bundleID: String) -> NSImage? { inventory.icon(for: bundleID) }
 
     /// Stores and registers a new shortcut, or clears it with `nil`.
@@ -179,7 +216,7 @@ final class SettingsModel: ObservableObject {
     /// `showOnlyMenuBarApps`: the field only ends up showing a combination once Carbon has
     /// confirmed it. A combination without ⌘/⌥/⌃ is refused outright, and a registration
     /// that fails — another app holds it — puts the previous one back, re-registers it,
-    /// and says so in Dutch instead of failing silently.
+    /// and says so instead of failing silently.
     func setHotKey(_ combo: HotKeyCombo?) {
         if let combo, let reason = combo.rejectionReason {
             hotKeyMessage = reason
@@ -220,7 +257,7 @@ struct SettingsView: View {
                 .tabItem { Text("General") }
                 .tag(SettingsTab.general)
         }
-        .frame(width: 460, height: 640)
+        .frame(width: 460, height: 790)
     }
 }
 
@@ -234,7 +271,7 @@ struct AppsTab: View {
 
     /// Filters the app list for display only — never touches the hidden set. An app
     /// filtered out of view stays hidden or visible exactly as it was; the filters only
-    /// change what's on screen. Ownership first, then the Alles/Verborgen/Altijd segment,
+    /// change what's on screen. Ownership first, then the All/Hidden/Always segment,
     /// then the search query; ownership only applies at all when the checkbox on the
     /// General tab is on — otherwise `owners` is `nil`, which already means "show
     /// everything".
@@ -344,6 +381,10 @@ struct AppsTab: View {
                     .layoutPriority(1)
             }
             Spacer(minLength: 8)
+            ShowWhenActiveButton(enabled: visibility == .hidden,
+                                 isOn: model.showWhenActive.contains(app.id)) {
+                model.setShowWhenActive($0, for: app.id)
+            }
             VisibilityPicker(selection: visibility) {
                 model.setVisibility($0, for: app.id)
             }
@@ -384,6 +425,38 @@ struct AppsTab: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 34)
+    }
+}
+
+/// "Show while this app is in front" — only meaningful for Hide: a visible app is already
+/// there, and Always hide means never. Rendered but inert for those, so the column stays
+/// aligned and the rule is not lost while the app is briefly switched to another state.
+struct ShowWhenActiveButton: View {
+
+    let enabled: Bool
+    let isOn: Bool
+    let onToggle: (Bool) -> Void
+
+    private var hint: String {
+        enabled ? "Show while this app is in front" : "Only for apps set to Hide"
+    }
+
+    var body: some View {
+        Button {
+            onToggle(!isOn)
+        } label: {
+            Image(systemName: isOn ? "macwindow.badge.plus" : "macwindow")
+                .font(.system(size: 11))
+                .foregroundStyle(enabled && isOn ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.secondary))
+                .frame(width: 26, height: 22)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
+        .help(hint)
+        .accessibilityLabel(hint)
+        .accessibilityValue(isOn ? "On" : "Off")
     }
 }
 
@@ -439,6 +512,8 @@ struct GeneralTab: View {
             Divider()
             behaviourSection
             Divider()
+            rulesSection
+            Divider()
             accessibilitySection
             Divider()
             updatesSection
@@ -491,8 +566,34 @@ struct GeneralTab: View {
                 .labelsHidden()
                 .frame(width: 160)
             }
+            Toggle("Expand when hovering the arrow", isOn: $model.revealOnHover)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if model.revealOnHover, !model.isTrusted {
+                Text("Needs Accessibility to find the arrow on screen — grant it below.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Toggle("Launch at login", isOn: $model.launchAtLogin)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var rulesSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            sectionHeader("RULES")
+            Toggle("Show Wi-Fi only when disconnected", isOn: $model.wifiOnlyWhenDisconnected)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle("Automatic presentation mode", isOn: $model.automaticPresentationMode)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text("Presentation mode keeps only the arrow, the clock and Control Center. It "
+                 + "switches on by itself while the display is mirrored, during macOS Screen "
+                 + "Sharing, or in a Zoom meeting — not when sharing from a browser, Teams or "
+                 + "FaceTime; use the right-click menu for those. Per app, the window button "
+                 + "on the Apps tab shows a hidden app while it is in front.")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 

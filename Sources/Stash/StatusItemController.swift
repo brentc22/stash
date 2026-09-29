@@ -15,13 +15,23 @@ final class StatusItemController: NSObject {
     private let onToggle: () -> Void
     private let onSettings: () -> Void
     private let onQuit: () -> Void
+    private let onPresentationToggle: () -> Void
+    /// Read when the menu opens, so the checkmark is never stale.
+    private let presentationState: () -> (manual: Bool, active: Bool)
+    private let hoverWatcher: HoverWatcher
 
     init(onToggle: @escaping () -> Void,
          onSettings: @escaping () -> Void,
-         onQuit: @escaping () -> Void) {
+         onQuit: @escaping () -> Void,
+         onHover: @escaping () -> Void,
+         onPresentationToggle: @escaping () -> Void,
+         presentationState: @escaping () -> (manual: Bool, active: Bool)) {
         self.onToggle = onToggle
         self.onSettings = onSettings
         self.onQuit = onQuit
+        self.onPresentationToggle = onPresentationToggle
+        self.presentationState = presentationState
+        self.hoverWatcher = HoverWatcher(onHover: onHover)
         self.item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         super.init()
 
@@ -30,7 +40,12 @@ final class StatusItemController: NSObject {
         item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
 
-    func render(state: BarState, available: Bool) {
+    /// Hover detection costs a global mouse monitor, so it only runs while wanted.
+    func setHoverEnabled(_ enabled: Bool) {
+        if enabled { hoverWatcher.start() } else { hoverWatcher.stop() }
+    }
+
+    func render(state: BarState, available: Bool, presenting: Bool = false) {
         guard let button = item.button else { return }
         let symbol: String
         let description: String
@@ -41,6 +56,8 @@ final class StatusItemController: NSObject {
             switch state {
             // "chevron.*" are SF Symbol identifiers, not our wording: renaming them to
             // "arrow.*" selects a different symbol. The prose calls this an arrow.
+            case .collapsed where presenting:
+                symbol = "chevron.left.2"; description = "Presentation mode — show hidden items"
             case .collapsed: symbol = "chevron.left";  description = "Show hidden items"
             case .expanded:  symbol = "chevron.right"; description = "Hide items"
             }
@@ -51,6 +68,7 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func buttonPressed() {
+        hoverWatcher.cancel()
         guard let event = NSApp.currentEvent else { onToggle(); return }
         if event.type == .rightMouseUp {
             showMenu()
@@ -69,6 +87,13 @@ final class StatusItemController: NSObject {
             update.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
             menu.addItem(.separator())
         }
+        let presentation = presentationState()
+        let presentationItem = menu.addItem(
+            withTitle: presentation.active && !presentation.manual ? "Presentation Mode (automatic)" : "Presentation Mode",
+            action: #selector(presentationPressed), keyEquivalent: "")
+        presentationItem.target = self
+        presentationItem.state = presentation.active ? .on : .off
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(settingsPressed), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
@@ -76,12 +101,21 @@ final class StatusItemController: NSObject {
             .target = self
         // popUp instead of assigning item.menu: the latter also shows the menu on a
         // left click, which would make toggling impossible.
-        menu.popUp(positioning: nil,
-                   at: NSPoint(x: 0, y: button.bounds.height + 4),
-                   in: button)
+        //
+        // Anchored to the pointer, not the button: on macOS 27 with more than one display
+        // the button's position follows the *active* display's menu bar, so anchoring to
+        // it opened the menu on the other screen. The pointer is always on the arrow that
+        // was actually clicked; the menu goes right below that screen's menu bar.
+        let pointer = NSEvent.mouseLocation
+        if let screen = NSScreen.screens.first(where: { NSMouseInRect(pointer, $0.frame, false) }) {
+            menu.popUp(positioning: nil, at: NSPoint(x: pointer.x, y: screen.visibleFrame.maxY), in: nil)
+        } else {
+            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
+        }
     }
 
     @objc private func settingsPressed() { onSettings() }
+    @objc private func presentationPressed() { onPresentationToggle() }
     @objc private func updatePressed() { Updater.shared.offerAvailable() }
     @objc private func quitPressed() { onQuit() }
 }

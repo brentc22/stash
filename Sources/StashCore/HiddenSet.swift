@@ -65,19 +65,38 @@ public final class HiddenSet {
 
     private static let key = "hiddenBundleIDs"
     private static let alwaysHiddenKey = "alwaysHiddenBundleIDs"
+    private static let showWhenActiveKey = "showWhenActiveBundleIDs"
 
     private let defaults: UserDefaults
     private var storage: Set<String>
     private var alwaysHiddenStorage: Set<String>
+    private var showWhenActiveStorage: Set<String>
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.storage = Set(defaults.stringArray(forKey: Self.key) ?? [])
         self.alwaysHiddenStorage = Set(defaults.stringArray(forKey: Self.alwaysHiddenKey) ?? [])
+        self.showWhenActiveStorage = Set(defaults.stringArray(forKey: Self.showWhenActiveKey) ?? [])
     }
 
     public var bundleIDs: Set<String> { storage }
     public var alwaysHiddenBundleIDs: Set<String> { alwaysHiddenStorage }
+
+    /// Hidden apps that come back while they are frontmost. Kept independently of the
+    /// visibility: switching an app to Visible and back to Hide keeps the rule, so a
+    /// quick round-trip through the buttons never silently loses it.
+    public var showWhenActiveBundleIDs: Set<String> { showWhenActiveStorage }
+
+    public func showsWhenActive(_ bundleID: String) -> Bool {
+        showWhenActiveStorage.contains(bundleID)
+    }
+
+    public func setShowWhenActive(_ on: Bool, for bundleID: String) {
+        let before = showWhenActiveStorage
+        if on { showWhenActiveStorage.insert(bundleID) } else { showWhenActiveStorage.remove(bundleID) }
+        guard showWhenActiveStorage != before else { return }
+        persist()
+    }
 
     /// The three-state visibility for one app. An app that ended up in both the hidden
     /// and always-hidden sets — should not happen through the UI, which only ever puts
@@ -109,5 +128,6 @@ public final class HiddenSet {
     private func persist() {
         defaults.set(storage.sorted(), forKey: Self.key)
         defaults.set(alwaysHiddenStorage.sorted(), forKey: Self.alwaysHiddenKey)
+        defaults.set(showWhenActiveStorage.sorted(), forKey: Self.showWhenActiveKey)
     }
 }

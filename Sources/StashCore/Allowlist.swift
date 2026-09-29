@@ -20,15 +20,33 @@ public enum Allowlist {
     ///   - ownBundleID: our own ID. Always included, regardless of everything else —
     ///     including a hand-edited defaults file that marks it `alwaysHidden` — without
     ///     the arrow the user cannot expand.
+    ///   - showWhenActive: hidden apps that come back while they are the frontmost app.
+    ///     Only affects `hidden` apps: "Always hide" keeps meaning never.
+    ///   - frontmost: the bundle ID of the frontmost app, if any.
+    ///   - presenting: presentation mode. While collapsed, only the arrow stays — even
+    ///     apps marked visible go. Expanding still shows everything not always-hidden:
+    ///     that is a deliberate click, and it must keep working mid-presentation.
     public static func compute(running: Set<String>,
                                hidden: Set<String>,
                                alwaysHidden: Set<String> = [],
                                state: BarState,
-                               ownBundleID: String) -> Set<String> {
+                               ownBundleID: String,
+                               showWhenActive: Set<String> = [],
+                               frontmost: String? = nil,
+                               presenting: Bool = false) -> Set<String> {
         let base: Set<String>
         switch state {
-        case .expanded:  base = running.subtracting(alwaysHidden)
-        case .collapsed: base = running.subtracting(hidden).subtracting(alwaysHidden)
+        case .expanded:
+            base = running.subtracting(alwaysHidden)
+        case .collapsed where presenting:
+            base = []
+        case .collapsed:
+            var shown = running.subtracting(hidden).subtracting(alwaysHidden)
+            if let frontmost, showWhenActive.contains(frontmost), hidden.contains(frontmost),
+               !alwaysHidden.contains(frontmost), running.contains(frontmost) {
+                shown.insert(frontmost)
+            }
+            base = shown
         }
         return base.union([ownBundleID])
     }
