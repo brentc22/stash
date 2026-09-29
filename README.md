@@ -102,6 +102,9 @@ These are limits of the underlying facility, not choices Stash made:
 - **No second bar or panel showing the hidden icons.** The technique that made that kind
   of UI possible — enumerating and repositioning each item's own window — doesn't exist
   on macOS 27.
+- **One allowlist for every display.** The facility takes a list of apps and system
+  items and nothing else, so an external monitor and the built-in screen always show the
+  same set.
 - **Private framework.** Any macOS update can break Stash, and an app built on this can
   never ship on the Mac App Store. That is a deliberate trade-off: the supported
   alternative is having no control over the menu bar at all.
@@ -166,19 +169,34 @@ Right-click the arrow for "Settings…". The window has two tabs.
 
 **Apps** lists every app Stash has seen running (apps not running right now are marked
 *not running*), each row carrying three buttons — Visible / Hide / Always
-hide — with only the active one tinted. Above the list: a search field, an
+hide — with only the active one tinted. In front of them, for apps set to Hide, a window
+button: *show while this app is in front*. The app then comes back whenever you switch to
+it and goes again when you switch away. Above the list: a search field, an
 All/Hidden/Always segment and a "shown of total" counter; below it, a line counting
 the three states.
 
 **General** holds everything that is not per-app: a recordable global shortcut (click
 the field, press the combination; Escape cancels, and a combination without ⌘/⌥/⌃ is
-refused), an auto-collapse delay, a "Launch at login" toggle backed
-by `SMAppService`, the optional "Only show apps with a menu bar icon" filter (see
+refused), an auto-collapse delay, "Expand when hovering the arrow", a "Launch at login"
+toggle backed by `SMAppService`, the rules (see [Rules](#rules-and-presentation-mode)), the optional "Only show apps with a menu bar icon" filter (see
 below), and the update settings (see [Updates](#updates)).
 
 <p>
   <img src="docs/images/settings-window.png" alt="Stash's settings window: the Apps tab, listing known apps with Visible / Hide / Always hide buttons" width="420">
 </p>
+
+### Rules and presentation mode
+
+- **Show Wi-Fi only when disconnected** takes the Wi-Fi item out of the collapsed bar
+  while there is a connection, so it only shows up when something is wrong. It needs
+  Wi-Fi to be shown in System Settings → Menu Bar in the first place.
+- **Presentation mode** hides everything except the arrow — including apps set to
+  Visible — until you expand. Switch it on by hand from the right-click menu, or let
+  "Presentation mode during screen sharing and calls" do it while this Mac is screen
+  shared, mirrored to another display, or in a Zoom meeting. Switching it off from the
+  menu during such a session keeps it off until that session ends.
+
+All of this is off by default, and none of it needs a permission.
 
 ### Optional: filtering the list to apps with a real menu bar icon
 

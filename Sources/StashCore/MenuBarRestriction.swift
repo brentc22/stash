@@ -12,6 +12,8 @@ public final class MenuBarRestriction: @unchecked Sendable {
     /// The allowlist `token` enforces, or `nil` when that is unknown (nothing applied,
     /// cleared, or rolled back after a failure). Guarded by `lock`, like `token`.
     private var appliedBundleIDs: Set<String>?
+    /// The system items `token` allows, compared alongside `appliedBundleIDs`.
+    private var appliedSystemItems: [NSNumber]?
     private let lock = NSLock()
 
     public init() {}
@@ -28,6 +30,7 @@ public final class MenuBarRestriction: @unchecked Sendable {
     /// deliberate user action, which then also repairs an assertion the system dropped
     /// without telling us.
     public func apply(allowing bundleIDs: Set<String>,
+                      systemItems: [NSNumber] = SystemItems.all,
                       force: Bool = false,
                       completion: ((Error?) -> Void)? = nil) {
         guard isAvailable else {
@@ -38,6 +41,7 @@ public final class MenuBarRestriction: @unchecked Sendable {
         lock.lock()
         let old = token
         let unchanged = !force && old != nil && appliedBundleIDs == bundleIDs
+            && appliedSystemItems == systemItems
         lock.unlock()
         if unchanged {
             completion?(nil)
@@ -51,7 +55,7 @@ public final class MenuBarRestriction: @unchecked Sendable {
 
         let created = STMenuBarShim.activate(
             withAllowedBundleIdentifiers: bundleIDs.sorted(),
-            allowedSystemItems: SystemItems.all
+            allowedSystemItems: systemItems
         ) { [weak self] error in
             guard let self, let createdToken = box.token else { return }
             if let error {
@@ -63,6 +67,7 @@ public final class MenuBarRestriction: @unchecked Sendable {
                 if self.token === createdToken {
                     self.token = old
                     self.appliedBundleIDs = nil
+                    self.appliedSystemItems = nil
                 }
                 self.lock.unlock()
                 completion?(MenuBarRestrictionError.activationFailed(error.localizedDescription))
@@ -86,6 +91,7 @@ public final class MenuBarRestriction: @unchecked Sendable {
         lock.lock()
         token = created
         appliedBundleIDs = bundleIDs
+        appliedSystemItems = systemItems
         lock.unlock()
     }
 
@@ -95,6 +101,7 @@ public final class MenuBarRestriction: @unchecked Sendable {
         let old = token
         token = nil
         appliedBundleIDs = nil
+        appliedSystemItems = nil
         lock.unlock()
         STMenuBarShim.invalidate(old)
     }

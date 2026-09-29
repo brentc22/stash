@@ -24,6 +24,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsModel: SettingsModel!
     private var hotKey: GlobalHotKey!
     private var state: BarState = .collapsed
+    private let presentationMonitor = PresentationMonitor()
+    private let wifiMonitor = WiFiMonitor()
+    /// Presentation mode switched on by hand. Not persisted: waking up tomorrow with an
+    /// empty menu bar because of yesterday's talk would look broken.
+    private var manualPresentation = false
+    /// The user switched off an automatic presentation mode. Holds until the signal that
+    /// caused it ends, so the next call or screen share turns it on again.
+    private var presentationSuppressed = false
+    /// When hover last expanded the bar — a click that lands right after must not
+    /// immediately collapse what the hover just opened.
+    private var hoverExpandedAt: Date?
+
+    private var isPresenting: Bool {
+        Presentation.isPresenting(manual: manualPresentation,
+                                  automatic: preferences.automaticPresentationMode,
+                                  suppressed: presentationSuppressed,
+                                  signals: presentationMonitor.signals)
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Single-instance guard: `make install` replaces the bundle on disk, but a
@@ -41,11 +59,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         statusItem = StatusItemController(
-            onToggle: { [weak self] in self?.toggle() },
+            onToggle: { [weak self] in self?.clickToggle() },
             onSettings: { [weak self] in self?.showSettings() },
-            onQuit: { [weak self] in self?.quit() }
+            onQuit: { [weak self] in self?.quit() },
+            onHover: { [weak self] in self?.hoverReveal() },
+            onPresentationToggle: { [weak self] in self?.togglePresentation() },
+            presentationState: { [weak self] in
+                (self?.manualPresentation ?? false, self?.isPresenting ?? false)
+            }
         )
-        statusItem.render(state: state, available: restriction.isAvailable)
+        render()
 
         collapseTimer = CollapseTimer { [weak self] in
             guard let self, self.state == .expanded else { return }
@@ -54,6 +77,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         inventory.onChange = { [weak self] in self?.rebuild() }
         inventory.start()
+
+        presentationMonitor.onChange = { [weak self] in
+            guard let self else { return }
+            if !self.presentationMonitor.signals.anyActive { self.presentationSuppressed = false }
+            self.render()
+            self.rebuild()
+        }
+        presentationMonitor.start()
+        wifiMonitor.onChange = { [weak self] in self?.rebuild() }
+        wifiMonitor.start()
+        // "Show while active" depends on which app is in front.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.rebuild() }
+        }
         rebuild()
 
         // Created before `SettingsModel` below: the model may reach back into
@@ -104,9 +143,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         restriction.clear()
     }
 
+    /// A click on the arrow. Ignored when it lands within a second of a hover that just
+    /// expanded the bar: the user was reaching for the arrow to open it, and the hover
+    /// beat them to it.
+    private func clickToggle() {
+        if state == .expanded, let at = hoverExpandedAt, Date().timeIntervalSince(at) < 1 {
+            hoverExpandedAt = nil
+            return
+        }
+        toggle()
+    }
+
+    private func hoverReveal() {
+        guard preferences.revealOnHover, state == .collapsed else { return }
+        toggle()
+        hoverExpandedAt = Date()
+    }
+
+    private func togglePresentation() {
+        if isPresenting {
+            manualPresentation = false
+            if presentationMonitor.signals.anyActive { presentationSuppressed = true }
+        } else {
+            manualPresentation = true
+        }
+        render()
+        rebuild(force: true)
+    }
+
+    private func render() {
+        statusItem.render(state: state, available: restriction.isAvailable, presenting: isPresenting)
+    }
+
     func toggle() {
         state = (state == .collapsed) ? .expanded : .collapsed
-        statusItem.render(state: state, available: restriction.isAvailable)
+        hoverExpandedAt = nil
+        render()
         if state == .expanded {
             collapseTimer.schedule(delay: preferences.collapseDelay)
         } else {
@@ -125,9 +197,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             hidden: hidden.bundleIDs,
             alwaysHidden: hidden.alwaysHiddenBundleIDs,
             state: state,
-            ownBundleID: ownBundleID
+            ownBundleID: ownBundleID,
+            showWhenActive: hidden.showWhenActiveBundleIDs,
+            frontmost: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            presenting: isPresenting
         )
-        restriction.apply(allowing: allowed, force: force) { [weak self] error in
+        let systemItems = SystemItems.allowed(hiding: SystemItems.hiddenByRules(
+            wifiOnlyWhenDisconnected: preferences.wifiOnlyWhenDisconnected,
+            wifiConnected: wifiMonitor.isConnected,
+            state: state
+        ))
+        restriction.apply(allowing: allowed, systemItems: systemItems, force: force) { [weak self] error in
             guard let error else { return }
             NSLog("Stash: could not apply restriction: \(error)")
             DispatchQueue.main.async {
@@ -161,7 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                   + "use by another app")
             return false
         }
-        NSLog("Stash: globale sneltoets \(combo.displayString) geregistreerd (OSStatus 0)")
+        NSLog("Stash: registered global shortcut \(combo.displayString) (OSStatus 0)")
         return true
     }
 

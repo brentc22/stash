@@ -724,4 +724,84 @@ T.test("installer: swapscript vervangt de app zodra het oude proces weg is") {
 
 try? FileManager.default.removeItem(at: updateTmp)
 
+T.test("presentatiemodus: ingeklapt blijft alleen het pijltje over, ook zichtbare apps gaan weg") {
+    let result = Allowlist.compute(running: ["a", "b", "own"], hidden: ["b"], state: .collapsed,
+                                   ownBundleID: "own", presenting: true)
+    T.equal(result, ["own"])
+}
+
+T.test("presentatiemodus: uitklappen toont alles behalve altijd-verborgen") {
+    let result = Allowlist.compute(running: ["a", "b", "c"], hidden: ["b"], alwaysHidden: ["c"],
+                                   state: .expanded, ownBundleID: "own", presenting: true)
+    T.equal(result, ["a", "b", "own"])
+}
+
+T.test("tonen-als-actief: verborgen app komt terug zolang hij vooraan staat") {
+    let front = Allowlist.compute(running: ["a", "b"], hidden: ["b"], state: .collapsed, ownBundleID: "own",
+                                  showWhenActive: ["b"], frontmost: "b")
+    T.equal(front, ["a", "b", "own"])
+    let back = Allowlist.compute(running: ["a", "b"], hidden: ["b"], state: .collapsed, ownBundleID: "own",
+                                 showWhenActive: ["b"], frontmost: "a")
+    T.equal(back, ["a", "own"])
+}
+
+T.test("tonen-als-actief: altijd-verborgen blijft nooit, en presentatiemodus wint") {
+    let always = Allowlist.compute(running: ["b"], hidden: [], alwaysHidden: ["b"], state: .collapsed,
+                                   ownBundleID: "own", showWhenActive: ["b"], frontmost: "b")
+    T.equal(always, ["own"])
+    let presenting = Allowlist.compute(running: ["b"], hidden: ["b"], state: .collapsed, ownBundleID: "own",
+                                       showWhenActive: ["b"], frontmost: "b", presenting: true)
+    T.equal(presenting, ["own"])
+}
+
+T.test("tonen-als-actief overleeft opnieuw laden en een omweg via zichtbaar") {
+    withTestDefaults { defaults in
+        let set = HiddenSet(defaults: defaults)
+        set.setVisibility(.hidden, for: "b")
+        set.setShowWhenActive(true, for: "b")
+        set.setVisibility(.visible, for: "b")
+        set.setVisibility(.hidden, for: "b")
+        T.expect(HiddenSet(defaults: defaults).showsWhenActive("b"), "regel moet blijven staan")
+        set.setShowWhenActive(false, for: "b")
+        T.expect(!HiddenSet(defaults: defaults).showsWhenActive("b"), "regel moet weg zijn")
+    }
+}
+
+T.test("wifi-regel: alleen weg als hij aan staat, er verbinding is en de balk ingeklapt is") {
+    T.equal(SystemItems.hiddenByRules(wifiOnlyWhenDisconnected: true, wifiConnected: true, state: .collapsed), [6])
+    T.equal(SystemItems.hiddenByRules(wifiOnlyWhenDisconnected: true, wifiConnected: false, state: .collapsed), [])
+    T.equal(SystemItems.hiddenByRules(wifiOnlyWhenDisconnected: false, wifiConnected: true, state: .collapsed), [])
+    T.equal(SystemItems.hiddenByRules(wifiOnlyWhenDisconnected: true, wifiConnected: true, state: .expanded), [])
+}
+
+T.test("systeemitems: verbergen haalt precies dat id weg, niets verbergen geeft de volle lijst") {
+    let allowed = SystemItems.allowed(hiding: [6]).map(\.intValue)
+    T.expect(!allowed.contains(6), "6 hoort weg te zijn")
+    T.equal(allowed.count, SystemItems.all.count - 1)
+    T.equal(SystemItems.allowed(hiding: []), SystemItems.all)
+}
+
+T.test("presentatiebeslissing: handmatig wint, automatisch telt alleen met opt-in en zonder onderdrukking") {
+    let call = PresentationSignals(inCall: true)
+    T.expect(Presentation.isPresenting(manual: true, automatic: false, signals: PresentationSignals()), "handmatig")
+    T.expect(!Presentation.isPresenting(manual: false, automatic: false, signals: call), "geen opt-in")
+    T.expect(Presentation.isPresenting(manual: false, automatic: true, signals: call), "opt-in + call")
+    T.expect(!Presentation.isPresenting(manual: false, automatic: true, suppressed: true, signals: call), "onderdrukt")
+    T.expect(!Presentation.isPresenting(manual: false, automatic: true, signals: PresentationSignals()), "geen signaal")
+}
+
+T.test("nieuwe voorkeuren staan standaard uit en reizen rond door UserDefaults") {
+    withTestDefaults { defaults in
+        let prefs = Preferences(defaults: defaults)
+        T.expect(!prefs.revealOnHover && !prefs.wifiOnlyWhenDisconnected && !prefs.automaticPresentationMode,
+                 "alles hoort standaard uit te staan")
+        prefs.revealOnHover = true
+        prefs.wifiOnlyWhenDisconnected = true
+        prefs.automaticPresentationMode = true
+        let reloaded = Preferences(defaults: defaults)
+        T.expect(reloaded.revealOnHover && reloaded.wifiOnlyWhenDisconnected && reloaded.automaticPresentationMode,
+                 "alles hoort bewaard te zijn")
+    }
+}
+
 T.finish()

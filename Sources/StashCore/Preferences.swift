@@ -24,6 +24,9 @@ public final class Preferences {
     private static let showOnlyMenuBarAppsKey = "showOnlyMenuBarApps"
     private static let hotKeyKeyCodeKey = "hotKeyKeyCode"
     private static let hotKeyModifiersKey = "hotKeyModifiers"
+    private static let revealOnHoverKey = "revealOnHover"
+    private static let wifiOnlyWhenDisconnectedKey = "wifiOnlyWhenDisconnected"
+    private static let automaticPresentationModeKey = "automaticPresentationMode"
 
     /// Written into `hotKeyKeyCodeKey` when the user clears the shortcut. A stored -1
     /// means "deliberately none", which is not the same as "nothing stored yet" — only
@@ -70,6 +73,26 @@ public final class Preferences {
     public var showOnlyMenuBarApps: Bool {
         get { defaults.bool(forKey: Self.showOnlyMenuBarAppsKey) }
         set { defaults.set(newValue, forKey: Self.showOnlyMenuBarAppsKey) }
+    }
+
+    /// Expand when the pointer rests on the arrow. Default `false`, like every other
+    /// behaviour that acts without a click.
+    public var revealOnHover: Bool {
+        get { defaults.bool(forKey: Self.revealOnHoverKey) }
+        set { defaults.set(newValue, forKey: Self.revealOnHoverKey) }
+    }
+
+    /// Hide the Wi-Fi item while connected. Default `false`.
+    public var wifiOnlyWhenDisconnected: Bool {
+        get { defaults.bool(forKey: Self.wifiOnlyWhenDisconnectedKey) }
+        set { defaults.set(newValue, forKey: Self.wifiOnlyWhenDisconnectedKey) }
+    }
+
+    /// Enter presentation mode by itself during screen sharing, mirroring or a call.
+    /// Default `false`: emptying someone's menu bar unasked would look like a bug.
+    public var automaticPresentationMode: Bool {
+        get { defaults.bool(forKey: Self.automaticPresentationModeKey) }
+        set { defaults.set(newValue, forKey: Self.automaticPresentationModeKey) }
     }
 
     /// The global shortcut, or `nil` for "no shortcut". This replaces the fixed ⌃⌥S:
