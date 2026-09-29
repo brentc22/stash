@@ -102,9 +102,6 @@ These are limits of the underlying facility, not choices Stash made:
 - **No second bar or panel showing the hidden icons.** The technique that made that kind
   of UI possible — enumerating and repositioning each item's own window — doesn't exist
   on macOS 27.
-- **The UI is in Dutch.** ("Verbergen" = Hide, "Automatisch inklappen" = Auto-collapse,
-  "Starten bij inloggen" = Start at login.) It isn't localized yet; the labels are short
-  enough to follow from the screenshots.
 - **Private framework.** Any macOS update can break Stash, and an app built on this can
   never ship on the Mac App Store. That is a deliberate trade-off: the supported
   alternative is having no control over the menu bar at all.
@@ -165,21 +162,87 @@ those measurements ambiguous.
 
 ## Settings
 
-Right-click the arrow for "Instellingen…" (Settings): a checklist of every app Stash
-has seen running (apps not running right now are marked *niet actief*), an auto-collapse
-delay, and a "Starten bij inloggen" (start at login) toggle backed by `SMAppService`.
+Right-click the arrow for "Settings…". The window has two tabs.
+
+**Apps** lists every app Stash has seen running (apps not running right now are marked
+*not running*), each row carrying three buttons — Visible / Hide / Always
+hide — with only the active one tinted. Above the list: a search field, an
+All/Hidden/Always segment and a "shown of total" counter; below it, a line counting
+the three states.
+
+**General** holds everything that is not per-app: a recordable global shortcut (click
+the field, press the combination; Escape cancels, and a combination without ⌘/⌥/⌃ is
+refused), an auto-collapse delay, a "Launch at login" toggle backed
+by `SMAppService`, the optional "Only show apps with a menu bar icon" filter (see
+below), and the update settings (see [Updates](#updates)).
 
 <p>
-  <img src="docs/images/settings-window.png" alt="Stash's settings window, listing known apps with checkboxes plus auto-collapse and login-item controls" width="420">
+  <img src="docs/images/settings-window.png" alt="Stash's settings window: the Apps tab, listing known apps with Visible / Hide / Always hide buttons" width="420">
 </p>
+
+### Optional: filtering the list to apps with a real menu bar icon
+
+By default the settings list shows every running app that *could* have a status item —
+about 112 processes on a typical machine, of which maybe 8 actually draw one. Turning on
+"Only show apps with a menu bar icon" narrows that list to the apps that genuinely
+own one, detected via `AXUIElementCopyAttributeValue(_:"AXExtrasMenuBar", _)` — see
+`.superpowers/sdd/2026-09-22-stash/menubar-detection-research.md` for the full
+measurement and why the private `MenuBarClientCore` enumeration API was not used instead
+(it is gated behind an Apple-only entitlement).
+
+This is purely a display filter — hiding, showing, the hotkey and everything else work
+identically whether it is on or off. Turning it on for the first time asks macOS for the
+**Accessibility** permission; declining it, or never turning the checkbox on, costs
+nothing and the settings list simply stays unfiltered.
+
+The checkbox records your *wish*, not the outcome: it stays on while the permission is
+still missing, the status line underneath says so plainly, and the filter starts working
+by itself as soon as trust arrives — Stash re-reads it every time the app becomes active
+again, which is the moment you come back from System Settings. There is also a "Check
+Again" button and one that opens the right System Settings pane directly.
+
+**The Accessibility grant does not survive `make install`.** It is tied to the running
+binary's code signature, and `make install` re-signs ad-hoc (`codesign --sign -`) on
+every build, which changes that signature. Concretely observed on this machine: System
+Settings → Privacy & Security → Accessibility kept showing "Stash" toggled on from an
+earlier build, but the freshly reinstalled binary still read `AXIsProcessTrusted() ==
+false` until the toggle was switched off and back on for that new binary. Expect to
+re-grant Accessibility after every `make install` during development. The same goes for
+an in-app update: a new release is a new ad-hoc signed binary, so the grant has to be
+given again (see below).
+
+### Updates
+
+Stash checks GitHub Releases once a day for a newer version — the only network request it
+makes. When there is one, it shows the release notes with three buttons: "Install and
+Relaunch" (download, check and swap the app, then relaunch), "Later", and "Skip This
+Version" (stay quiet about this version until you check yourself). A waiting update also
+shows up at the top of the right-click menu as "Update available: Stash x.y.z…".
+
+On the General tab, under **Updates**: "Automatically check for updates" (on by default)
+turns the daily check off, and "Check Now" checks right away. The line next to it shows
+the installed version and when Stash last checked.
+
+Before swapping anything in, Stash checks that the download is `com.brentc22.Stash`, that it
+is the version the release promised, and that its code signature is intact
+(`codesign --verify --deep --strict`). If any of that fails, or `/Applications` isn't
+writable, it offers the download page instead.
+
+Because the new binary is ad-hoc signed, macOS no longer applies the old Accessibility
+grant to it. That only matters when the menu bar filter is on. In that case the update
+dialog says so in advance, and right after the relaunch Stash opens the General tab with the
+instructions for granting it again.
+
+Installed through Homebrew? After an in-app update, `brew` still lists the old version until
+the next `brew upgrade`. That is harmless.
 
 ## Uninstall
 
-- **Turn off "Starten bij inloggen" in Settings before quitting**, if it was on. That
+- **Turn off "Launch at login" in Settings before quitting**, if it was on. That
   unregisters the `SMAppService` login item cleanly; quitting first without doing this
   leaves the login item registered, so macOS keeps launching Stash at login even after
   the app itself is gone.
-- **Quit Stash** — right-click the arrow and choose "Stash stoppen". This lifts the
+- **Quit Stash** — right-click the arrow and choose "Quit Stash". This lifts the
   assessment-mode assertion and hands every hidden icon back before the app disappears.
 - **Remove the app**: `rm -rf /Applications/Stash.app`.
 - **Remove its saved settings**: `rm -f ~/Library/Preferences/com.brentc22.Stash.plist`.

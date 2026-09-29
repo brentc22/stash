@@ -4,6 +4,55 @@ public struct KnownApp: Identifiable, Hashable {
     public let id: String       // bundle identifier
     public let name: String
     public let isRunning: Bool
+
+    public init(id: String, name: String, isRunning: Bool) {
+        self.id = id
+        self.name = name
+        self.isRunning = isRunning
+    }
+}
+
+extension KnownApp {
+    /// The settings search field's predicate: name or bundle id, case-insensitive.
+    /// Lives here (not in `SettingsView`) so it stays a plain, testable function instead
+    /// of logic buried in a SwiftUI view body.
+    public func matches(searchQuery query: String) -> Bool {
+        guard !query.isEmpty else { return true }
+        return name.localizedCaseInsensitiveContains(query)
+            || id.localizedCaseInsensitiveContains(query)
+    }
+
+    /// Whether this app survives the "only apps with a menu bar icon" filter.
+    ///
+    /// `owners == nil` means the Accessibility sweep is unavailable or has never run —
+    /// "unknown", not "none" — so every app passes. An empty, non-`nil` set is treated the
+    /// same way: a real sweep on this app (Stash always owns its own item) can never come
+    /// back genuinely empty, so an empty result also means "not meaningful", never "hide
+    /// everything". This is the rule the whole feature hinges on: a wrong read here empties
+    /// the settings list and the user can no longer configure anything.
+    public func hasMenuBarIcon(owners: Set<String>?) -> Bool {
+        guard let owners, !owners.isEmpty else { return true }
+        return owners.contains(id)
+    }
+}
+
+extension Array where Element == KnownApp {
+    /// The Apps tab's combined filter: menu bar ownership, the Alles/Verborgen/Altijd
+    /// segment and the search query. A free function (not view logic) so it stays testable
+    /// without a running app or granted permission. All three narrow cumulatively, in the fixed order ownership → visibility → query, so
+    /// picking "Hidden" and then typing never widens the result again. `visibility`
+    /// is a closure rather than a dictionary so this stays independent of how the caller
+    /// stores state.
+    public func filtered(owners: Set<String>?,
+                         query: String,
+                         filter: AppListFilter,
+                         visibility: (String) -> AppVisibility) -> [KnownApp] {
+        self.filter {
+            $0.hasMenuBarIcon(owners: owners)
+                && filter.matches(visibility($0.id))
+                && $0.matches(searchQuery: query)
+        }
+    }
 }
 
 /// Tracks which apps are running and which ones we have ever seen.
@@ -12,16 +61,18 @@ public struct KnownApp: Identifiable, Hashable {
 /// after we have passed that list to the menu bar, and it is not in the list, so it silently
 /// vanishes from the menu bar. The app looks like it randomly eats programs. Every launch
 /// must therefore trigger a recomputation.
-/// - Note: Marked `@unchecked Sendable` because all mutations occur on the main thread:
-///   observers deliver on `.main`, and the app accesses this class only from the main thread
-///   (status item, app delegate, settings view).
+/// - Note: Marked `@unchecked Sendable` because all mutations occur on the main thread. The
+///   KVO callback in `start()` arrives on whichever thread changed `runningApplications`, so
+///   it only hops to main and touches nothing itself; the app accesses this class only from
+///   the main thread (status item, app delegate, settings view).
 public final class AppInventory: @unchecked Sendable {
 
     private static let namesKey = "knownAppNames"
 
     private let defaults: UserDefaults
     private var names: [String: String]
-    private var observers: [NSObjectProtocol] = []
+    private var observation: NSKeyValueObservation?
+    private var cachedMenuBarOwners: Set<String>?
 
     public var onChange: (() -> Void)?
 
@@ -33,21 +84,22 @@ public final class AppInventory: @unchecked Sendable {
 
     deinit { stop() }
 
+    /// Observes `runningApplications` via KVO instead of `didLaunchApplicationNotification`:
+    /// that notification only fires for apps with a Dock icon, and menu bar apps
+    /// (`LSUIElement`) have none — precisely the apps Stash exists for. Measured
+    /// 24-09-2026: launching Portside fired the KVO change, not the notification.
     public func start() {
-        let center = NSWorkspace.shared.notificationCenter
-        for name in [NSWorkspace.didLaunchApplicationNotification,
-                     NSWorkspace.didTerminateApplicationNotification] {
-            let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                self?.refresh()
+        observation = NSWorkspace.shared.observe(\.runningApplications) { [weak self] _, _ in
+            DispatchQueue.main.async {
+                // A change queued before `stop()` must not still fire after it.
+                guard let self, self.observation != nil else { return }
+                self.refresh()
             }
-            observers.append(token)
         }
     }
 
     public func stop() {
-        let center = NSWorkspace.shared.notificationCenter
-        observers.forEach { center.removeObserver($0) }
-        observers.removeAll()
+        observation = nil
     }
 
     public func refresh() {
@@ -55,15 +107,32 @@ public final class AppInventory: @unchecked Sendable {
         onChange?()
     }
 
+    /// Re-sweeps which running apps currently own a menu bar item and caches the result.
+    /// The sweep costs ~263 ms on the main thread (measured in menubar-detection-research.md),
+    /// so it runs only on demand — from `SettingsModel.refreshTrust()`, and only while the
+    /// filter is wanted. Not from `refresh()`: that fires on every change to the running
+    /// apps, and nothing reads this cache without sweeping first anyway.
+    public func refreshMenuBarOwners() {
+        cachedMenuBarOwners = MenuBarOwners.sweep()
+    }
+
+    /// `nil` when Accessibility is not granted or no sweep has run yet — callers must
+    /// treat that the same as an empty result: "unknown", show everything.
+    public var menuBarOwners: Set<String>? { cachedMenuBarOwners }
+
     public var runningBundleIDs: Set<String> {
         Set(eligibleApplications().compactMap(\.bundleIdentifier))
     }
 
     public var knownApps: [KnownApp] {
-        let running = runningBundleIDs
-        let ids = Set(names.keys).union(running)
-        return ids
-            .map { KnownApp(id: $0, name: names[$0] ?? $0, isRunning: running.contains($0)) }
+        // One pass over the running apps for both the running set and their live names.
+        var live: [String: String] = [:]
+        for app in eligibleApplications() {
+            guard let id = app.bundleIdentifier else { continue }
+            live[id] = app.localizedName ?? id
+        }
+        return Set(names.keys).union(live.keys)
+            .map { KnownApp(id: $0, name: names[$0] ?? live[$0] ?? $0, isRunning: live[$0] != nil) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 

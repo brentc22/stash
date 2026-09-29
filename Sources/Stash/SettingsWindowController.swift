@@ -5,7 +5,7 @@ import SwiftUI
 /// accessory app with no SwiftUI `App` lifecycle of its own.
 // @MainActor: this only ever creates and drives AppKit objects (NSWindow, NSHostingView)
 // from main-thread callbacks (the status item's right-click menu). No `deinit`, so — same
-// reasoning as `SettingsModel` above and `AppDelegate`/`StatusItemController` (Task 5) —
+// reasoning as `SettingsModel` above and `AppDelegate`/`StatusItemController` —
 // `@MainActor` is available and avoids the `@unchecked Sendable` route that `AppInventory`
 // and `CollapseTimer` need only because they have a `deinit`.
 @MainActor
@@ -28,7 +28,7 @@ final class SettingsWindowController {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 640),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false

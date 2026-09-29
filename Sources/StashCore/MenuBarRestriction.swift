@@ -9,16 +9,27 @@ public enum MenuBarRestrictionError: Error {
 public final class MenuBarRestriction: @unchecked Sendable {
 
     private var token: AnyObject?
+    /// The allowlist `token` enforces, or `nil` when that is unknown (nothing applied,
+    /// cleared, or rolled back after a failure). Guarded by `lock`, like `token`.
+    private var appliedBundleIDs: Set<String>?
     private let lock = NSLock()
 
     public init() {}
 
     public var isAvailable: Bool { STMenuBarShim.isAvailable() }
 
-    /// Replaces the current restriction. Idempotent. The new token becomes active
-    /// synchronously; the old one is only invalidated once `completion` confirms
-    /// activation actually succeeded, and is restored if it failed.
-    public func apply(allowing bundleIDs: Set<String>, completion: ((Error?) -> Void)? = nil) {
+    /// Replaces the current restriction. The new token becomes active synchronously; the
+    /// old one is only invalidated once `completion` confirms activation actually
+    /// succeeded, and is restored if it failed.
+    ///
+    /// Skips the call when `bundleIDs` is exactly what is already enforced: every `apply`
+    /// builds a new system assertion, and callers re-apply on every change to the running
+    /// apps, most of which never reach the allowlist. `force` applies anyway — for a
+    /// deliberate user action, which then also repairs an assertion the system dropped
+    /// without telling us.
+    public func apply(allowing bundleIDs: Set<String>,
+                      force: Bool = false,
+                      completion: ((Error?) -> Void)? = nil) {
         guard isAvailable else {
             completion?(MenuBarRestrictionError.unavailable)
             return
@@ -26,7 +37,12 @@ public final class MenuBarRestriction: @unchecked Sendable {
 
         lock.lock()
         let old = token
+        let unchanged = !force && old != nil && appliedBundleIDs == bundleIDs
         lock.unlock()
+        if unchanged {
+            completion?(nil)
+            return
+        }
 
         // `activate` returns its token synchronously; the completion closure below only
         // fires afterward. The box exists purely to carry that synchronous return value
@@ -46,6 +62,7 @@ public final class MenuBarRestriction: @unchecked Sendable {
                 self.lock.lock()
                 if self.token === createdToken {
                     self.token = old
+                    self.appliedBundleIDs = nil
                 }
                 self.lock.unlock()
                 completion?(MenuBarRestrictionError.activationFailed(error.localizedDescription))
@@ -68,6 +85,7 @@ public final class MenuBarRestriction: @unchecked Sendable {
         // succeeded — see the rollback branch for what happens if it didn't.
         lock.lock()
         token = created
+        appliedBundleIDs = bundleIDs
         lock.unlock()
     }
 
@@ -76,6 +94,7 @@ public final class MenuBarRestriction: @unchecked Sendable {
         lock.lock()
         let old = token
         token = nil
+        appliedBundleIDs = nil
         lock.unlock()
         STMenuBarShim.invalidate(old)
     }

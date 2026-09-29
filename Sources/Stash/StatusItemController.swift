@@ -5,7 +5,7 @@ import StashCore
 // @MainActor: this class only ever touches AppKit (NSStatusItem, NSButton, NSMenu),
 // created in and driven entirely by main-thread callbacks (target/action). Without it,
 // Swift 6's strict concurrency checking flags every AppKit access here as a reference
-// to main-actor-isolated state from a nonisolated context. No `deinit`, so the Task 4
+// to main-actor-isolated state from a nonisolated context. No `deinit`, so the
 // `AppInventory` trap (a `deinit` that calls `stop()`, which cannot be actor-isolated)
 // does not apply.
 @MainActor
@@ -36,13 +36,13 @@ final class StatusItemController: NSObject {
         let description: String
         if !available {
             symbol = "exclamationmark.triangle"
-            description = "Verbergen niet beschikbaar"
+            description = "Hiding unavailable"
         } else {
             switch state {
             // "chevron.*" are SF Symbol identifiers, not our wording: renaming them to
             // "arrow.*" selects a different symbol. The prose calls this an arrow.
-            case .collapsed: symbol = "chevron.left";  description = "Toon verborgen items"
-            case .expanded:  symbol = "chevron.right"; description = "Verberg items"
+            case .collapsed: symbol = "chevron.left";  description = "Show hidden items"
+            case .expanded:  symbol = "chevron.right"; description = "Hide items"
             }
         }
         button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
@@ -62,10 +62,17 @@ final class StatusItemController: NSObject {
     private func showMenu() {
         guard let button = item.button else { return }
         let menu = NSMenu()
-        menu.addItem(withTitle: "Instellingen…", action: #selector(settingsPressed), keyEquivalent: ",")
+        if let version = Updater.shared.available?.version {
+            let update = menu.addItem(withTitle: "Update available: Stash \(version)…",
+                                      action: #selector(updatePressed), keyEquivalent: "")
+            update.target = self
+            update.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+            menu.addItem(.separator())
+        }
+        menu.addItem(withTitle: "Settings…", action: #selector(settingsPressed), keyEquivalent: ",")
             .target = self
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Stash stoppen", action: #selector(quitPressed), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Stash", action: #selector(quitPressed), keyEquivalent: "q")
             .target = self
         // popUp instead of assigning item.menu: the latter also shows the menu on a
         // left click, which would make toggling impossible.
@@ -75,5 +82,6 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func settingsPressed() { onSettings() }
+    @objc private func updatePressed() { Updater.shared.offerAvailable() }
     @objc private func quitPressed() { onQuit() }
 }
