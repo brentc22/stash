@@ -113,7 +113,7 @@ struct HotKeyRecorderField: View {
             } label: {
                 Text(fieldText)
                     .font(.system(size: recorder.isRecording ? 11.5 : 14))
-                    // Never wrap: "Druk nu een toetscombinatie…" is longer than the
+                    // Never wrap: "Press a key combination…" is longer than the
                     // resting width, and a two-line label breaks out of the rounded rect.
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -134,7 +134,7 @@ struct HotKeyRecorderField: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Sneltoets opnemen")
+            .accessibilityLabel("Record shortcut")
 
             Button {
                 recorder.stop()
@@ -148,8 +148,8 @@ struct HotKeyRecorderField: View {
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
-            .help("Sneltoets wissen")
-            .accessibilityLabel("Sneltoets wissen")
+            .help("Clear shortcut")
+            .accessibilityLabel("Clear shortcut")
             .disabled(combo == nil)
             .opacity(combo == nil ? 0.4 : 1)
         }
@@ -160,9 +160,9 @@ struct HotKeyRecorderField: View {
 
     private var fieldText: String {
         guard recorder.isRecording else {
-            return combo?.displayString ?? "Geen"
+            return combo?.displayString ?? "None"
         }
         let held = HotKeyCombo.modifierString(for: recorder.heldModifiers)
-        return held.isEmpty ? "Druk nu een toetscombinatie…" : held + "…"
+        return held.isEmpty ? "Press a key combination…" : held + "…"
     }
 }

@@ -80,12 +80,12 @@ final class Updater: ObservableObject {
                 if UpdatePolicy.shouldOffer(release, current: currentVersion, skipped: skipped, userInitiated: userInitiated) {
                     offer(release)
                 } else if userInitiated {
-                    inform("Je hebt de nieuwste versie", "Stash \(currentVersion) is de laatste versie.")
+                    inform("You're up to date", "Stash \(currentVersion) is the latest version.")
                 }
             } catch {
-                NSLog("Stash: controleren op updates mislukt: \(error)")
+                NSLog("Stash: checking for updates failed: \(error)")
                 if userInitiated {
-                    inform("Kon niet controleren op updates", error.localizedDescription, style: .warning)
+                    inform("Could not check for updates", error.localizedDescription, style: .warning)
                 }
             }
         }
@@ -102,19 +102,19 @@ final class Updater: ObservableObject {
         guard let version = release.version else { return }
         let alert = NSAlert()
         alert.icon = NSApp.applicationIconImage
-        alert.messageText = "Stash \(version) is beschikbaar"
-        var text = "Je hebt nu \(currentVersion). Nu installeren? Stash start daarna vanzelf opnieuw."
+        alert.messageText = "Stash \(version) is available"
+        var text = "You have \(currentVersion). Install now? Stash relaunches by itself afterwards."
         if usesAccessibility() {
             // Release builds are ad-hoc signed: macOS ties the grant to the binary's hash,
             // so a new version is a new identity and the old grant no longer applies.
-            text += "\n\nMacOS vraagt daarna mogelijk opnieuw om Toegankelijkheid voor het "
-                + "menubalk-filter. Stash opent dan zelf de instellingen om je erdoor te loodsen."
+            text += "\n\nmacOS may then ask for Accessibility again for the "
+                + "menu bar filter. Stash will open its settings to walk you through it."
         }
         alert.informativeText = text
         alert.accessoryView = notesView(release.body)
-        alert.addButton(withTitle: "Installeren en herstarten")
+        alert.addButton(withTitle: "Install and Relaunch")
         alert.addButton(withTitle: "Later")
-        alert.addButton(withTitle: "Deze versie overslaan")
+        alert.addButton(withTitle: "Skip This Version")
 
         NSApp.activate(ignoringOtherApps: true)
         switch alert.runModal() {
@@ -154,7 +154,7 @@ final class Updater: ObservableObject {
             return
         }
 
-        showProgress("Stash \(version) downloaden…")
+        showProgress("Downloading Stash \(version)…")
         Task {
             do {
                 let (download, _) = try await URLSession.shared.download(from: zipURL)
@@ -180,13 +180,13 @@ final class Updater: ObservableObject {
                 NSApp.terminate(nil)
             } catch {
                 hideProgress()
-                NSLog("Stash: update installeren mislukt: \(error)")
+                NSLog("Stash: installing update failed: \(error)")
                 let alert = NSAlert()
                 alert.alertStyle = .warning
-                alert.messageText = "Kon de update niet installeren"
-                alert.informativeText = "\(error.localizedDescription)\n\nJe kan hem ook zelf downloaden op GitHub."
-                alert.addButton(withTitle: "Open downloadpagina")
-                alert.addButton(withTitle: "Annuleren")
+                alert.messageText = "Could not install the update"
+                alert.informativeText = "\(error.localizedDescription)\n\nYou can also download it yourself from GitHub."
+                alert.addButton(withTitle: "Open Download Page")
+                alert.addButton(withTitle: "Cancel")
                 NSApp.activate(ignoringOtherApps: true)
                 if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(release.htmlURL) }
             }
@@ -196,7 +196,7 @@ final class Updater: ObservableObject {
     private func showProgress(_ message: String) {
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 300, height: 76),
                             styleMask: [.titled], backing: .buffered, defer: false)
-        panel.title = "Stash-update"
+        panel.title = "Stash Update"
         let label = NSTextField(labelWithString: message)
         let bar = NSProgressIndicator()
         bar.isIndeterminate = true

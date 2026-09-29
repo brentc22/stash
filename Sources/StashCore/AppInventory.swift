@@ -40,7 +40,7 @@ extension Array where Element == KnownApp {
     /// The Apps tab's combined filter: menu bar ownership, the Alles/Verborgen/Altijd
     /// segment and the search query. A free function (not view logic) so it stays testable
     /// without a running app or granted permission. All three narrow cumulatively, in the fixed order ownership → visibility → query, so
-    /// picking "Verborgen" and then typing never widens the result again. `visibility`
+    /// picking "Hidden" and then typing never widens the result again. `visibility`
     /// is a closure rather than a dictionary so this stays independent of how the caller
     /// stores state.
     public func filtered(owners: Set<String>?,

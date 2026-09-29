@@ -8,9 +8,9 @@ public enum AppVisibility: String, CaseIterable, Sendable {
 
     public var label: String {
         switch self {
-        case .visible:      return "Zichtbaar"
-        case .hidden:       return "Verbergen"
-        case .alwaysHidden: return "Altijd verbergen"
+        case .visible:      return "Visible"
+        case .hidden:       return "Hide"
+        case .alwaysHidden: return "Always hide"
         }
     }
 
@@ -28,9 +28,9 @@ public enum AppVisibility: String, CaseIterable, Sendable {
     /// shown as a tooltip and used as the accessibility label.
     public var hint: String {
         switch self {
-        case .visible:      return "Altijd zichtbaar"
-        case .hidden:       return "Verbergen achter het pijltje"
-        case .alwaysHidden: return "Nooit tonen"
+        case .visible:      return "Always visible"
+        case .hidden:       return "Hide behind the arrow"
+        case .alwaysHidden: return "Never show"
         }
     }
 }
@@ -44,9 +44,9 @@ public enum AppListFilter: String, CaseIterable, Sendable {
 
     public var label: String {
         switch self {
-        case .all:          return "Alles"
-        case .hidden:       return "Verborgen"
-        case .alwaysHidden: return "Altijd"
+        case .all:          return "All"
+        case .hidden:       return "Hidden"
+        case .alwaysHidden: return "Always"
         }
     }
 

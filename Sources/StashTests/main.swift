@@ -444,8 +444,8 @@ T.test("elke lijstfilter- en zichtbaarheidsstand heeft een label, symbool en too
     for filter in AppListFilter.allCases {
         T.expect(!filter.label.isEmpty, "\(filter) mist een label")
     }
-    T.equal(AppListFilter.all.label, "Alles")
-    T.equal(AppListFilter.alwaysHidden.label, "Altijd")
+    T.equal(AppListFilter.all.label, "All")
+    T.equal(AppListFilter.alwaysHidden.label, "Always")
 
     for visibility in AppVisibility.allCases {
         T.expect(!visibility.symbolName.isEmpty, "\(visibility) mist een SF Symbol")
@@ -468,7 +468,7 @@ T.test("sneltoets reist als keyCode plus modifiers rond door UserDefaults") {
         let reloaded = Preferences(defaults: defaults).hotKey
         T.equal(reloaded?.keyCode, 49)
         T.equal(reloaded?.modifiers, combo.modifiers)
-        T.equal(reloaded?.displayString, "⌘⇧Spatie")
+        T.equal(reloaded?.displayString, "⌘⇧Space")
 
         // Wissen is iets anders dan "nog nooit gezet": na een expliciete nil mag de
         // migratie niet alsnog ⌃⌥S terugzetten.
@@ -518,10 +518,10 @@ T.test("de weergavestring zet de modifiers in de vaste volgorde ⌘⌥⌃⇧ plu
 T.test("een onbekende keyCode geeft een terugvalnaam, geen lege string") {
     let name = HotKeyCombo.keyName(for: 200)
     T.expect(!name.isEmpty, "een onbekende toets mag nooit een lege naam opleveren")
-    T.equal(name, "Toets 200")
+    T.equal(name, "Key 200")
 
     let combo = HotKeyCombo(keyCode: 200, modifiers: NSEvent.ModifierFlags.control.rawValue)
-    T.equal(combo.displayString, "⌃Toets 200")
+    T.equal(combo.displayString, "⌃Key 200")
 }
 
 T.test("filter wil aan maar zonder toestemming: volledige lijst, niet leeg") {

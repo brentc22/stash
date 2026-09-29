@@ -49,9 +49,9 @@ public struct HotKeyCombo: Equatable, Sendable {
         !modifierFlags.intersection([.command, .option, .control]).isEmpty
     }
 
-    /// Why a combination was refused, in Dutch, or `nil` when it is fine.
+    /// Why a combination was refused, or `nil` when it is fine.
     public var rejectionReason: String? {
-        isValid ? nil : "Kies een combinatie met ⌘, ⌥ of ⌃ erbij — anders werkt die toets nergens meer."
+        isValid ? nil : "Pick a combination that includes ⌘, ⌥ or ⌃ — otherwise that key stops working everywhere else."
     }
 
     /// Modifiers in the fixed order ⌘⌥⌃⇧, then the key. The order is fixed
@@ -77,7 +77,7 @@ public struct HotKeyCombo: Equatable, Sendable {
     /// simply wrong on a non-US layout.
     public static func keyName(for keyCode: UInt16) -> String {
         if let name = names[keyCode] { return name }
-        return "Toets \(keyCode)"
+        return "Key \(keyCode)"
     }
 
     private static let names: [UInt16: String] = [
@@ -88,13 +88,13 @@ public struct HotKeyCombo: Equatable, Sendable {
         45: "N", 46: "M",
         24: "=", 27: "-", 30: "]", 33: "[", 39: "'", 41: ";", 42: "\\", 43: ",",
         44: "/", 47: ".", 50: "`",
-        36: "Return", 48: "Tab", 49: "Spatie", 51: "Delete", 53: "Esc",
+        36: "Return", 48: "Tab", 49: "Space", 51: "Delete", 53: "Esc",
         65: ".", 67: "*", 69: "+", 71: "Clear", 75: "/", 76: "Enter", 78: "-", 81: "=",
         82: "0", 83: "1", 84: "2", 85: "3", 86: "4", 87: "5", 88: "6", 89: "7",
         91: "8", 92: "9",
         96: "F5", 97: "F6", 98: "F7", 99: "F3", 100: "F8", 101: "F9", 103: "F11",
         105: "F13", 107: "F14", 109: "F10", 111: "F12", 113: "F15",
-        114: "Help", 115: "Home", 116: "Page Up", 117: "Delete vooruit", 118: "F4",
+        114: "Help", 115: "Home", 116: "Page Up", 117: "Forward Delete", 118: "F4",
         119: "End", 120: "F2", 121: "Page Down", 122: "F1",
         123: "←", 124: "→", 125: "↓", 126: "↑",
     ]

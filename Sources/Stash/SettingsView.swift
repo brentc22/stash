@@ -52,7 +52,7 @@ final class SettingsModel: ObservableObject {
     /// A Dutch line under the shortcut field — a refused combination or a failed
     /// registration. `nil` when there is nothing to say.
     @Published var hotKeyMessage: String?
-    /// "Alleen apps met een menubalk-icoon" — the user's *wish*, which survives a
+    /// "Only show apps with a menu bar icon" — the user's *wish*, which survives a
     /// permission that is not (yet) granted.
     ///
     /// It used to snap back to `false` in that case, and that was the bug:
@@ -197,7 +197,7 @@ final class SettingsModel: ObservableObject {
             preferences.hotKey = previous
             _ = onHotKeyChanged()
             hotKey = preferences.hotKey
-            hotKeyMessage = "Deze combinatie is al in gebruik door een andere app."
+            hotKeyMessage = "This combination is already in use by another app."
             return
         }
         hotKey = preferences.hotKey
@@ -217,7 +217,7 @@ struct SettingsView: View {
                 .tabItem { Text("Apps") }
                 .tag(SettingsTab.apps)
             GeneralTab(model: model)
-                .tabItem { Text("Algemeen") }
+                .tabItem { Text("General") }
                 .tag(SettingsTab.general)
         }
         .frame(width: 460, height: 640)
@@ -267,7 +267,7 @@ struct AppsTab: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.secondary)
-            TextField("Zoeken", text: $model.query)
+            TextField("Search", text: $model.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
         }
@@ -294,10 +294,10 @@ struct AppsTab: View {
             .labelsHidden()
             .fixedSize()
             Spacer()
-            // "getoond van totaal": the total is the full inventory, so turning on the
+            // "shown of total": the total is the full inventory, so turning on the
             // menu bar filter on the Algemeen tab is visible here as the left number
             // dropping while the right one stays put.
-            Text("\(shown) van \(model.apps.count)")
+            Text("\(shown) of \(model.apps.count)")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
         }
@@ -306,7 +306,7 @@ struct AppsTab: View {
     @ViewBuilder
     private func list(_ rows: [KnownApp]) -> some View {
         if rows.isEmpty {
-            Text("Geen apps gevonden")
+            Text("No apps found")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -337,7 +337,7 @@ struct AppsTab: View {
                 .foregroundStyle(visibility == .alwaysHidden ? AnyShapeStyle(.secondary)
                                                              : AnyShapeStyle(.primary))
             if !app.isRunning {
-                Text("niet actief")
+                Text("not running")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
@@ -376,8 +376,8 @@ struct AppsTab: View {
         let counts = Dictionary(grouping: rows) { model.visibility(for: $0.id) }
             .mapValues(\.count)
         return HStack {
-            Text("\(counts[.visible] ?? 0) zichtbaar · \(counts[.hidden] ?? 0) verborgen "
-                 + "· \(counts[.alwaysHidden] ?? 0) altijd verborgen")
+            Text("\(counts[.visible] ?? 0) visible · \(counts[.hidden] ?? 0) hidden "
+                 + "· \(counts[.alwaysHidden] ?? 0) always hidden")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             Spacer()
@@ -451,9 +451,9 @@ struct GeneralTab: View {
 
     private var hotKeySection: some View {
         VStack(alignment: .leading, spacing: 9) {
-            sectionHeader("SNELTOETS")
+            sectionHeader("SHORTCUT")
             HStack(spacing: 10) {
-                Text("Verbergen en tonen")
+                Text("Hide and show")
                     .font(.system(size: 12.5))
                 Spacer()
                 HotKeyRecorderField(
@@ -468,9 +468,9 @@ struct GeneralTab: View {
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text("Klik op het veld en druk de combinatie die je wil. Escape annuleert. Is "
-                 + "hij al door een andere app bezet, dan zegt Stash dat meteen in plaats "
-                 + "van stil niets te doen.")
+            Text("Click the field and press the combination you want. Escape cancels. If "
+                 + "another app already uses it, Stash tells you right away instead of "
+                 + "silently doing nothing.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -479,9 +479,9 @@ struct GeneralTab: View {
 
     private var behaviourSection: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionHeader("GEDRAG")
+            sectionHeader("BEHAVIOUR")
             HStack(spacing: 10) {
-                Text("Automatisch inklappen")
+                Text("Auto-collapse")
                 Spacer()
                 Picker("", selection: $model.collapseDelay) {
                     ForEach(CollapseDelay.allCases, id: \.rawValue) { delay in
@@ -491,20 +491,19 @@ struct GeneralTab: View {
                 .labelsHidden()
                 .frame(width: 160)
             }
-            Toggle("Starten bij inloggen", isOn: $model.launchAtLogin)
+            Toggle("Launch at login", isOn: $model.launchAtLogin)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     private var accessibilitySection: some View {
         VStack(alignment: .leading, spacing: 9) {
-            sectionHeader("TOEGANKELIJKHEID")
-            Toggle("Alleen apps met een menubalk-icoon tonen", isOn: $model.showOnlyMenuBarApps)
+            sectionHeader("ACCESSIBILITY")
+            Toggle("Only show apps with a menu bar icon", isOn: $model.showOnlyMenuBarApps)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Hiervoor vraagt macOS eenmalig Toegankelijkheid. Stash gebruikt dat "
-                 + "alleen om te zien wélke apps een icoon hebben — verbergen en tonen "
-                 + "werkt ook zonder. Geef je geen toestemming, dan blijft de volledige "
-                 + "lijst staan.")
+            Text("For this, macOS asks once for Accessibility. Stash only uses it to see "
+                 + "which apps have an icon — hiding and showing work without it. If you "
+                 + "don't grant it, the full list stays.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -528,7 +527,7 @@ struct GeneralTab: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
-            Button("Opnieuw controleren") { model.refreshTrust() }
+            Button("Check Again") { model.refreshTrust() }
                 .controlSize(.small)
         }
         .padding(.top, 2)
@@ -536,12 +535,12 @@ struct GeneralTab: View {
 
     private var statusText: String {
         guard model.showOnlyMenuBarApps else {
-            return "Filter staat uit — de volledige lijst wordt getoond"
+            return "Filter is off — showing the full list"
         }
         if let found = model.effectiveOwners?.count {
-            return "Toestemming verleend · \(found) apps met een icoon gevonden"
+            return "Permission granted · \(found) apps with an icon found"
         }
-        return "Nog geen toestemming — de volledige lijst blijft staan"
+        return "No permission yet — the full list stays"
     }
 
     /// Shown only while the wish is on but trust is missing — the moment the user is
@@ -549,21 +548,21 @@ struct GeneralTab: View {
     /// nobody opens a README while staring at a switch that is already blue.
     private var permissionHelp: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("Het filter gaat vanzelf aan zodra de toestemming er is — je hoeft dit "
-                 + "vinkje niet opnieuw aan te klikken.")
+            Text("The filter turns on by itself as soon as permission is granted — you don't "
+                 + "need to tick this box again.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Staat Stash er al bij mét een blauw schuifje en werkt het tóch niet? "
-                 + "Stash is ad-hoc ondertekend, en macOS koppelt Toegankelijkheid voor "
-                 + "zo'n app aan de cdhash van de binary. Elke nieuwe versie is dus een "
-                 + "nieuwe identiteit: de regel die je ziet hoort bij een binary die niet "
-                 + "meer bestaat. Haal die regel weg met het min-knopje en voeg Stash "
-                 + "opnieuw toe.")
+            Text("Stash is already listed with its switch on, and it still doesn't work? "
+                 + "Stash is ad-hoc signed, and for such an app macOS ties Accessibility "
+                 + "to the binary's cdhash. Every new version is therefore a new "
+                 + "identity: the entry you see belongs to a binary that no longer "
+                 + "exists. Remove that entry with the minus button and add Stash "
+                 + "again.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Open Systeeminstellingen") { model.openAccessibilitySettings() }
+            Button("Open System Settings") { model.openAccessibilitySettings() }
                 .controlSize(.small)
         }
         .padding(9)
@@ -577,7 +576,7 @@ struct GeneralTab: View {
     private var updatesSection: some View {
         VStack(alignment: .leading, spacing: 9) {
             sectionHeader("UPDATES")
-            Toggle("Automatisch controleren op updates", isOn: $updater.automaticallyChecks)
+            Toggle("Automatically check for updates", isOn: $updater.automaticallyChecks)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 7) {
                 Text(updateStatus)
@@ -586,10 +585,10 @@ struct GeneralTab: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
                 if let version = updater.available?.version {
-                    Button("Stash \(version) installeren…") { updater.offerAvailable() }
+                    Button("Install Stash \(version)…") { updater.offerAvailable() }
                         .controlSize(.small)
                 } else {
-                    Button("Nu controleren") { updater.check(userInitiated: true) }
+                    Button("Check Now") { updater.check(userInitiated: true) }
                         .controlSize(.small)
                         .disabled(updater.isBusy)
                 }
@@ -597,19 +596,18 @@ struct GeneralTab: View {
         }
     }
 
-    /// "Versie 0.1.0 · laatst gecontroleerd vandaag om 15:42", or the version that is waiting.
+    /// "Version 0.1.0 · last checked today at 15:42", or the version that is waiting.
     private var updateStatus: String {
-        if updater.isBusy { return "Versie \(Self.version) · controleren…" }
+        if updater.isBusy { return "Version \(Self.version) · checking…" }
         if let version = updater.available?.version {
-            return "Versie \(Self.version) · Stash \(version) is beschikbaar"
+            return "Version \(Self.version) · Stash \(version) is available"
         }
-        guard let last = updater.lastCheck else { return "Versie \(Self.version) · nog niet gecontroleerd" }
+        guard let last = updater.lastCheck else { return "Version \(Self.version) · not checked yet" }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "nl_BE")
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
         formatter.doesRelativeDateFormatting = true
-        return "Versie \(Self.version) · laatst gecontroleerd \(formatter.string(from: last))"
+        return "Version \(Self.version) · last checked \(formatter.string(from: last))"
     }
 
     private var footer: some View {
@@ -618,7 +616,7 @@ struct GeneralTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            Link("Broncode op GitHub", destination: URL(string: "https://github.com/brentc22/stash")!)
+            Link("Source on GitHub", destination: URL(string: "https://github.com/brentc22/stash")!)
                 .font(.caption)
         }
     }
