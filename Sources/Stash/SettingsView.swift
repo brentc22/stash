@@ -236,7 +236,7 @@ struct AppsTab: View {
     /// filtered out of view stays hidden or visible exactly as it was; the filters only
     /// change what's on screen. Ownership first, then the Alles/Verborgen/Altijd segment,
     /// then the search query; ownership only applies at all when the checkbox on the
-    /// Algemeen tab is on — otherwise `owners` is `nil`, which already means "show
+    /// General tab is on — otherwise `owners` is `nil`, which already means "show
     /// everything".
     private var filteredApps: [KnownApp] {
         return model.apps.filtered(owners: model.effectiveOwners,
@@ -295,7 +295,7 @@ struct AppsTab: View {
             .fixedSize()
             Spacer()
             // "shown of total": the total is the full inventory, so turning on the
-            // menu bar filter on the Algemeen tab is visible here as the left number
+            // menu bar filter on the General tab is visible here as the left number
             // dropping while the right one stays put.
             Text("\(shown) of \(model.apps.count)")
                 .font(.system(size: 11))

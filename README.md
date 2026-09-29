@@ -177,7 +177,7 @@ by `SMAppService`, the optional "Only show apps with a menu bar icon" filter (se
 below), and the update settings (see [Updates](#updates)).
 
 <p>
-  <img src="docs/images/settings-window.png" alt="Stash's settings window, listing known apps with checkboxes plus auto-collapse and login-item controls" width="420">
+  <img src="docs/images/settings-window.png" alt="Stash's settings window: the Apps tab, listing known apps with Visible / Hide / Always hide buttons" width="420">
 </p>
 
 ### Optional: filtering the list to apps with a real menu bar icon
