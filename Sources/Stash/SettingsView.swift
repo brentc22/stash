@@ -30,7 +30,17 @@ final class SettingsModel: ObservableObject {
         }
     }
     @Published var revealOnHover: Bool {
-        didSet { preferences.revealOnHover = revealOnHover }
+        didSet {
+            guard !isReloading else { return }
+            preferences.revealOnHover = revealOnHover
+            // Finding the arrow on screen goes through Accessibility — same permission,
+            // same one-time prompt as the menu bar filter.
+            if revealOnHover, !MenuBarOwners.isTrusted {
+                MenuBarOwners.requestTrust()
+            }
+            refreshTrust()
+            onChange()
+        }
     }
     @Published var wifiOnlyWhenDisconnected: Bool {
         didSet {
@@ -141,6 +151,7 @@ final class SettingsModel: ObservableObject {
         launchAtLogin = preferences.launchAtLogin
         isReloading = true
         showOnlyMenuBarApps = preferences.showOnlyMenuBarApps
+        revealOnHover = preferences.revealOnHover
         isReloading = false
         // `refresh()` must reload everything that is persisted, or the window shows a
         // stale value the second time it is opened. `refreshTrust()` covers the
@@ -246,7 +257,7 @@ struct SettingsView: View {
                 .tabItem { Text("General") }
                 .tag(SettingsTab.general)
         }
-        .frame(width: 460, height: 720)
+        .frame(width: 460, height: 790)
     }
 }
 
@@ -557,6 +568,12 @@ struct GeneralTab: View {
             }
             Toggle("Expand when hovering the arrow", isOn: $model.revealOnHover)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if model.revealOnHover, !model.isTrusted {
+                Text("Needs Accessibility to find the arrow on screen — grant it below.")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Toggle("Launch at login", isOn: $model.launchAtLogin)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -567,12 +584,13 @@ struct GeneralTab: View {
             sectionHeader("RULES")
             Toggle("Show Wi-Fi only when disconnected", isOn: $model.wifiOnlyWhenDisconnected)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Toggle("Presentation mode during screen sharing and calls", isOn: $model.automaticPresentationMode)
+            Toggle("Automatic presentation mode", isOn: $model.automaticPresentationMode)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("Presentation mode hides everything but the arrow while this Mac is screen "
-                 + "shared, mirrored to another display, or in a Zoom meeting. You can also "
-                 + "switch it on by hand from the right-click menu. Per app, the window "
-                 + "button on the Apps tab shows a hidden app while it is in front.")
+            Text("Presentation mode keeps only the arrow, the clock and Control Center. It "
+                 + "switches on by itself while the display is mirrored, during macOS Screen "
+                 + "Sharing, or in a Zoom meeting — not when sharing from a browser, Teams or "
+                 + "FaceTime; use the right-click menu for those. Per app, the window button "
+                 + "on the Apps tab shows a hidden app while it is in front.")
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

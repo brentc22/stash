@@ -12,7 +12,8 @@ import StashCore
 final class PresentationMonitor {
 
     private(set) var signals = PresentationSignals()
-    var onChange: (() -> Void)?
+    /// Receives the signals from before the change.
+    var onChange: ((PresentationSignals) -> Void)?
     private var timer: Timer?
 
     /// Process names that exist only while a call is live. Zoom starts `CptHost` when a
@@ -20,25 +21,34 @@ final class PresentationMonitor {
     /// between, so the app alone would say nothing.
     private static let callProcessNames: Set<String> = ["CptHost"]
 
-    func start() {
-        poll()
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.poll() }
+    /// Starts or stops polling. Stopping resets the signals, so a stale "in a call" can
+    /// never outlive the setting that was reading it.
+    func setRunning(_ running: Bool) {
+        guard running != (timer != nil) else { return }
+        if running {
+            timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.poll() }
+            }
+            // Read once without `onChange`: this runs inside `rebuild()`, which goes on to
+            // use the fresh signals itself — a callback here would re-enter it.
+            signals = Self.current()
+        } else {
+            timer?.invalidate()
+            timer = nil
+            signals = PresentationSignals()
         }
     }
 
-    func stop() {
-        timer?.invalidate()
-        timer = nil
+    private static func current() -> PresentationSignals {
+        PresentationSignals(screenShared: isScreenShared(), mirroring: isMirroring(), inCall: isInCall())
     }
 
     private func poll() {
-        let next = PresentationSignals(screenShared: Self.isScreenShared(),
-                                       mirroring: Self.isMirroring(),
-                                       inCall: Self.isInCall())
+        let next = Self.current()
         guard next != signals else { return }
+        let previous = signals
         signals = next
-        onChange?()
+        onChange?(previous)
     }
 
     /// Screen Sharing (VNC) viewers watching this Mac. The session dictionary is the only
@@ -82,7 +92,12 @@ final class WiFiMonitor {
     var onChange: (() -> Void)?
     private var monitor: NWPathMonitor?
 
-    func start() {
+    func setRunning(_ running: Bool) {
+        guard running != (monitor != nil) else { return }
+        if running { start() } else { stop() }
+    }
+
+    private func start() {
         let monitor = NWPathMonitor(requiredInterfaceType: .wifi)
         monitor.pathUpdateHandler = { [weak self] path in
             let connected = path.status == .satisfied
@@ -96,8 +111,9 @@ final class WiFiMonitor {
         self.monitor = monitor
     }
 
-    func stop() {
+    private func stop() {
         monitor?.cancel()
         monitor = nil
+        isConnected = false
     }
 }

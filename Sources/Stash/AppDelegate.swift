@@ -78,15 +78,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         inventory.onChange = { [weak self] in self?.rebuild() }
         inventory.start()
 
-        presentationMonitor.onChange = { [weak self] in
+        presentationMonitor.onChange = { [weak self] previous in
             guard let self else { return }
-            if !self.presentationMonitor.signals.anyActive { self.presentationSuppressed = false }
-            self.render()
+            self.presentationSuppressed = Presentation.keepsSuppression(
+                self.presentationSuppressed, from: previous, to: self.presentationMonitor.signals)
             self.rebuild()
         }
-        presentationMonitor.start()
         wifiMonitor.onChange = { [weak self] in self?.rebuild() }
-        wifiMonitor.start()
         // "Show while active" depends on which app is in front.
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -154,8 +152,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggle()
     }
 
+    /// Never while presenting: the pointer resting on the arrow on its way to the menu
+    /// must not flash every hidden icon onto the audience's screen.
     private func hoverReveal() {
-        guard preferences.revealOnHover, state == .collapsed else { return }
+        guard preferences.revealOnHover, state == .collapsed, !isPresenting else { return }
         toggle()
         hoverExpandedAt = Date()
     }
@@ -163,11 +163,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func togglePresentation() {
         if isPresenting {
             manualPresentation = false
-            if presentationMonitor.signals.anyActive { presentationSuppressed = true }
+            if preferences.automaticPresentationMode, presentationMonitor.signals.anyActive {
+                presentationSuppressed = true
+            }
         } else {
             manualPresentation = true
         }
-        render()
         rebuild(force: true)
     }
 
@@ -191,6 +192,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// the running apps, and after every change to the hidden set. An unchanged
     /// allowlist is skipped unless `force` — see `MenuBarRestriction.apply`.
     func rebuild(force: Bool = false) {
+        syncMonitors()
+        render()
         guard restriction.isAvailable else { return }
         let allowed = Allowlist.compute(
             running: inventory.runningBundleIDs,
@@ -202,19 +205,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             frontmost: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
             presenting: isPresenting
         )
-        let systemItems = SystemItems.allowed(hiding: SystemItems.hiddenByRules(
+        let hiddenSystemItems = SystemItems.hiddenByRules(
             wifiOnlyWhenDisconnected: preferences.wifiOnlyWhenDisconnected,
             wifiConnected: wifiMonitor.isConnected,
-            state: state
-        ))
-        restriction.apply(allowing: allowed, systemItems: systemItems, force: force) { [weak self] error in
+            state: state,
+            presenting: isPresenting
+        )
+        restriction.apply(allowing: allowed, hidingSystemItems: hiddenSystemItems, force: force) { [weak self] error in
             guard let error else { return }
             NSLog("Stash: could not apply restriction: \(error)")
             DispatchQueue.main.async {
                 guard let self else { return }
-                self.statusItem.render(state: self.state, available: false)
+                self.statusItem.render(state: self.state, available: false, presenting: self.isPresenting)
             }
         }
+    }
+
+    /// Runs the watchers only while a preference needs them — all three are off by
+    /// default, and none should cost anything then. Called from `rebuild()`, which every
+    /// preference change already goes through.
+    private func syncMonitors() {
+        presentationMonitor.setRunning(preferences.automaticPresentationMode)
+        if !preferences.automaticPresentationMode { presentationSuppressed = false }
+        wifiMonitor.setRunning(preferences.wifiOnlyWhenDisconnected)
+        statusItem.setHoverEnabled(preferences.revealOnHover)
     }
 
     private func showSettings() {

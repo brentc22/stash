@@ -774,6 +774,25 @@ T.test("wifi-regel: alleen weg als hij aan staat, er verbinding is en de balk in
     T.equal(SystemItems.hiddenByRules(wifiOnlyWhenDisconnected: true, wifiConnected: true, state: .expanded), [])
 }
 
+T.test("presentatiemodus: ingeklapt blijven alleen klok en Control Center over, uitgeklapt alles") {
+    let hidden = SystemItems.hiddenByRules(wifiOnlyWhenDisconnected: false, wifiConnected: false,
+                                           state: .collapsed, presenting: true)
+    T.expect(!hidden.contains(2) && !hidden.contains(8), "klok en Control Center blijven")
+    T.expect(hidden.contains(6) && hidden.contains(5), "wifi en geluid gaan weg")
+    T.equal(SystemItems.hiddenByRules(wifiOnlyWhenDisconnected: false, wifiConnected: false,
+                                      state: .expanded, presenting: true), [])
+}
+
+T.test("onderdrukking vervalt bij het einde van de sessie of bij een nieuwe, ook met blijvende spiegeling") {
+    let mirror = PresentationSignals(mirroring: true)
+    let mirrorAndCall = PresentationSignals(mirroring: true, inCall: true)
+    T.expect(Presentation.keepsSuppression(true, from: mirror, to: mirror), "zelfde sessie: blijft")
+    T.expect(!Presentation.keepsSuppression(true, from: mirror, to: mirrorAndCall), "nieuwe call: vervalt")
+    T.expect(!Presentation.keepsSuppression(true, from: mirror, to: PresentationSignals()), "alles weg: vervalt")
+    T.expect(Presentation.keepsSuppression(true, from: mirrorAndCall, to: mirror), "call stopt, spiegeling blijft: blijft")
+    T.expect(!Presentation.keepsSuppression(false, from: mirror, to: mirror), "niet onderdrukt blijft niet onderdrukt")
+}
+
 T.test("systeemitems: verbergen haalt precies dat id weg, niets verbergen geeft de volle lijst") {
     let allowed = SystemItems.allowed(hiding: [6]).map(\.intValue)
     T.expect(!allowed.contains(6), "6 hoort weg te zijn")
