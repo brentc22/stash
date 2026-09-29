@@ -75,11 +75,11 @@ public enum UpdateError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case .noAppInArchive: "De download bevat geen app."
-        case .wrongApp(let id): "De download bevat een andere app (\(id ?? "onbekend"))."
-        case .wrongVersion(let found, let expected): "De download is versie \(found ?? "onbekend"), verwacht was \(expected)."
-        case .invalidSignature(let detail): "De handtekening van de gedownloade app klopt niet: \(detail)"
-        case .command(let cmd, let status): "\(cmd) mislukte (exitcode \(status))."
+        case .noAppInArchive: "The download contains no app."
+        case .wrongApp(let id): "The download contains a different app (\(id ?? "unknown"))."
+        case .wrongVersion(let found, let expected): "The download is version \(found ?? "unknown"), expected \(expected)."
+        case .invalidSignature(let detail): "The downloaded app's signature is invalid: \(detail)"
+        case .command(let cmd, let status): "\(cmd) failed (exit code \(status))."
         }
     }
 }

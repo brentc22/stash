@@ -156,9 +156,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         guard hotKey.register(combo) else {
-            NSLog("Stash: kon globale sneltoets \(combo.displayString) niet registreren "
-                  + "(OSStatus \(hotKey.lastRegisterStatus)) — waarschijnlijk al in "
-                  + "gebruik door een andere app")
+            NSLog("Stash: could not register global shortcut \(combo.displayString) "
+                  + "(OSStatus \(hotKey.lastRegisterStatus)) — probably already in "
+                  + "use by another app")
             return false
         }
         NSLog("Stash: globale sneltoets \(combo.displayString) geregistreerd (OSStatus 0)")

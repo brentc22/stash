@@ -12,8 +12,8 @@ public enum Allowlist {
     ///   - running: everything running right now. Must be fresh: a stale list will
     ///     leave a newly started app out of the allowlist, and it will then disappear
     ///     unwanted.
-    ///   - hidden: what the user has marked "Verbergen" — back when expanded.
-    ///   - alwaysHidden: what the user has marked "Altijd verbergen" — never back, in
+    ///   - hidden: what the user has marked "Hide" — back when expanded.
+    ///   - alwaysHidden: what the user has marked "Always hide" — never back, in
     ///     neither state. Defaults to empty so existing call sites that only know about
     ///     `hidden` keep compiling and behaving exactly as before.
     ///   - state: collapsed or expanded.
