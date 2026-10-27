@@ -8,6 +8,8 @@
 [![MIT](https://img.shields.io/github/license/brentc22/stash?style=flat-square&color=2f9e44)](LICENSE)
 
 ```sh
+brew tap brentc22/stash
+brew trust brentc22/stash
 brew install --cask brentc22/stash/stash
 ```
 
@@ -125,6 +127,8 @@ These are limits of the underlying facility, not choices Stash made:
 With Homebrew:
 
 ```sh
+brew tap brentc22/stash
+brew trust brentc22/stash
 brew install --cask brentc22/stash/stash
 xattr -dr com.apple.quarantine /Applications/Stash.app   # Stash is not notarised
 ```
