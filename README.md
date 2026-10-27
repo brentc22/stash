@@ -12,11 +12,10 @@ brew install --cask brentc22/stash/stash
 ```
 
 <p>
-  <img src="docs/images/menubar-expanded.png" alt="Menu bar with Stash expanded: every status item visible" width="590"><br>
-  <img src="docs/images/menubar-collapsed.png" alt="The same menu bar collapsed by Stash: only the arrow and a few apps remain" width="590">
+  <img src="docs/images/stash-demo.gif" alt="Animation: one click on Stash's arrow collapses the menu bar to a few icons, a second click brings the rest back" width="590">
 </p>
 
-*Before and after one click on the arrow.*
+*One click to tuck the clutter away, one click to bring it back.*
 
 Stash hides macOS menu bar icons behind a single arrow, so a crowded bar collapses to
 one click. It targets **macOS 27**, the release that broke this whole category of app at once. Some
