@@ -1,5 +1,23 @@
 # Stash
 
+**A free, open source menu bar hider for macOS 27.** One arrow, one click, a clean menu bar.
+
+[![Release](https://img.shields.io/github/v/release/brentc22/stash?style=flat-square&color=4c6ef5)](https://github.com/brentc22/stash/releases/latest)
+![macOS 27](https://img.shields.io/badge/macOS-27-111?style=flat-square&logo=apple)
+![Swift 6](https://img.shields.io/badge/Swift-6-F05138?style=flat-square&logo=swift&logoColor=white)
+[![MIT](https://img.shields.io/github/license/brentc22/stash?style=flat-square&color=2f9e44)](LICENSE)
+
+```sh
+brew install --cask brentc22/stash/stash
+```
+
+<p>
+  <img src="docs/images/menubar-expanded.png" alt="Menu bar with Stash expanded: every status item visible" width="590"><br>
+  <img src="docs/images/menubar-collapsed.png" alt="The same menu bar collapsed by Stash: only the arrow and a few apps remain" width="590">
+</p>
+
+*Before and after one click on the arrow.*
+
 Stash hides macOS menu bar icons behind a single arrow, so a crowded bar collapses to
 one click. It targets **macOS 27**, the release that broke this whole category of app at once. Some
 of them have since come back: Bartender (Golden Gate beta), Thaw (2.0) and Brow all
@@ -10,12 +28,6 @@ log evidence below is Ice's.
 Stash is the open source option next to those: the same job, nothing to buy, nothing to
 sign in to, and the research it is built on is in this repository.
 
-<p>
-  <img src="docs/images/menubar-collapsed.png" alt="Menu bar with Stash's arrow collapsed, hiding several status items" width="420">
-</p>
-
-*Collapsed: only the arrow and a handful of apps are visible. Click it and the rest
-reappear; click again and they're gone.*
 
 ## Why the existing tools stopped working
 
@@ -110,6 +122,16 @@ These are limits of the underlying facility, not choices Stash made:
   alternative is having no control over the menu bar at all.
 
 ## Install
+
+With Homebrew:
+
+```sh
+brew install --cask brentc22/stash/stash
+xattr -dr com.apple.quarantine /Applications/Stash.app   # Stash is not notarised
+```
+
+Or download `Stash-<version>.zip` from the [latest release](https://github.com/brentc22/stash/releases/latest)
+and move `Stash.app` to `/Applications`. To build it yourself:
 
 ```
 git clone https://github.com/brentc22/stash.git
