@@ -823,4 +823,73 @@ T.test("nieuwe voorkeuren staan standaard uit en reizen rond door UserDefaults")
     }
 }
 
+// MARK: - Control Center controls (#10)
+
+/// The real `ControlIdentity` of the Dark Mode control, copied from macOS 27's
+/// `com.apple.controlcenter` preferences: a keyed archive of CHSControlIdentity.
+let darkModeIdentity = "YnBsaXN0MDDUAQIDBAUGBwpYJHZlcnNpb25ZJGFyY2hpdmVyVCR0b3BYJG9iamVjdHMSAAGGoF8QD05TS2V5ZWRBcmNoaXZlctEICVRyb290gAGoCwwVHR4fJidVJG51bGzUDQ4PEBESExRZaW50ZW50UmVmVGtpbmRVZXh0SWRWJGNsYXNzgACABoACgAfUFhcYEBEaGxxfEBBkZXZpY2VJZGVudGlmaWVyXxAZY29udGFpbmVyQnVuZGxlSWRlbnRpZmllcl8QGWV4dGVuc2lvbkJ1bmRsZUlkZW50aWZpZXKAAIAEgAOABV8QGmNvbS5hcHBsZS5jb250cm9scy5kaXNwbGF5XxAXY29tLmFwcGxlLmNvbnRyb2xjZW50ZXLSICEiI1okY2xhc3NuYW1lWCRjbGFzc2VzXxAUQ0hTRXh0ZW5zaW9uSWRlbnRpdHmiJCVfEBRDSFNFeHRlbnNpb25JZGVudGl0eVhOU09iamVjdF8QJGNvbS5hcHBsZS5jb250cm9scy5kaXNwbGF5LmRhcmstbW9kZdIgISgpXxASQ0hTQ29udHJvbElkZW50aXR5oiolXxASQ0hTQ29udHJvbElkZW50aXR5AAgAEQAaACQAKQAyADcASQBMAFEAUwBcAGIAawB1AHoAgACHAIkAiwCNAI8AmACrAMcA4wDlAOcA6QDrAQgBIgEnATIBOwFSAVUBbAF1AZwBoQG2AbkAAAAAAAACAQAAAAAAAAArAAAAAAAAAAAAAAAAAAABzg=="
+
+func controlsConfiguration(_ controls: [(name: String, identity: String)]) -> Data {
+    let list = controls.map { ["DisplayName": $0.name, "ControlIdentity": $0.identity, "ControlType": 1] as [String: Any] }
+    return try! JSONSerialization.data(withJSONObject: ["Controls": list])
+}
+
+T.test("controls: leest de extensie-id uit Control Centers voorkeur") {
+    let controls = MenuBarControls.parse(configuration: controlsConfiguration([("Dark Mode", darkModeIdentity)]))
+    T.equal(controls, [MenuBarControl(extensionID: "com.apple.controls.display", name: "Dark Mode")])
+}
+
+T.test("controls: één extensie met meerdere controls wordt één rij") {
+    let controls = MenuBarControls.parse(configuration: controlsConfiguration([
+        ("Dark Mode", darkModeIdentity), ("Night Shift", darkModeIdentity), ("Dark Mode", darkModeIdentity),
+    ]))
+    T.equal(controls, [MenuBarControl(extensionID: "com.apple.controls.display", name: "Dark Mode · Night Shift")])
+}
+
+T.test("controls: onleesbare voorkeur geeft gewoon niets") {
+    T.equal(MenuBarControls.parse(configuration: Data("niet json".utf8)), [])
+    T.equal(MenuBarControls.parse(configuration: controlsConfiguration([("Kapot", "bm9wZQ==")])), [])
+    T.equal(MenuBarControls.parse(configuration: Data("{}".utf8)), [])
+}
+
+T.test("controls: staan in de allowlist en in de lijst, ook met de menubalkfilter aan") {
+    withTestDefaults { defaults in
+        let control = MenuBarControl(extensionID: "com.apple.controls.display", name: "Dark Mode")
+        let inventory = AppInventory(defaults: defaults, readControls: { [control] })
+        T.expect(inventory.runningBundleIDs.contains("com.apple.controls.display"),
+                 "zonder de extensie-id in de allowlist houdt macOS de control altijd weg")
+
+        let row = inventory.knownApps.first { $0.id == "com.apple.controls.display" }
+        T.equal(row?.name, "Dark Mode")
+        T.equal(row?.isControl, true)
+        T.expect(row?.hasMenuBarIcon(owners: ["com.brentc22.Stash"]) == true,
+                 "de Accessibility-sweep ziet geen controls; de filter mag ze niet wegfilteren")
+
+        let allowed = Allowlist.compute(running: inventory.runningBundleIDs, hidden: ["com.apple.controls.display"],
+                                        state: .collapsed, ownBundleID: "com.brentc22.Stash")
+        T.expect(!allowed.contains("com.apple.controls.display"), "een verborgen control blijft weg als ingeklapt")
+    }
+}
+
+T.test("controls: een nieuwe control triggert onChange, een ongewijzigde niet") {
+    withTestDefaults { defaults in
+        nonisolated(unsafe) var current: [MenuBarControl] = []
+        let inventory = AppInventory(defaults: defaults, readControls: { current })
+        var called = 0
+        inventory.onChange = { called += 1 }
+        inventory.refreshControlsIfChanged()
+        T.equal(called, 0, "niets veranderd:")
+        current = [MenuBarControl(extensionID: "com.example.controls", name: "Voorbeeld")]
+        inventory.refreshControlsIfChanged()
+        T.equal(called, 1, "control toegevoegd:")
+        T.expect(inventory.runningBundleIDs.contains("com.example.controls"), "nieuwe control hoort in de allowlist")
+    }
+}
+
+T.test("controls: live voorkeur lezen crasht niet") {
+    let live = MenuBarControls.current()
+    print("       \(live.map { "\($0.name) [\($0.extensionID)]" })")
+    T.expect(live.allSatisfy { !$0.extensionID.isEmpty }, "geen lege extensie-id's")
+}
+
 T.finish()
