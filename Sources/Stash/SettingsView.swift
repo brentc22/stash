@@ -401,7 +401,13 @@ struct AppsTab: View {
 
     @ViewBuilder
     private func icon(for app: KnownApp) -> some View {
-        if let image = model.icon(for: app.id) {
+        if app.isControl {
+            Image(systemName: "switch.2")
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(width: 18, height: 18)
+                .help("Control Center control")
+        } else if let image = model.icon(for: app.id) {
             Image(nsImage: image)
                 .resizable()
                 .frame(width: 18, height: 18)
